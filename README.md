@@ -11,7 +11,7 @@
 - **完全无入侵**：以 class API 挂载到宿主任意容器元素（不注册 Custom Element、不占用全局标签名、无全局副作用），`destroy()` 后不留任何痕迹。
 - **样式完全隔离**：强作用域样式（`.aether-host` 前缀 + 继承属性显式重置），宿主页面样式与编辑器样式互不影响；主题通过 CSS 变量定制。（注：不使用 Shadow DOM——其 Selection API 在 WebKit 等引擎不穿透边界，会破坏真实输入。）
 - **IME 安全**：中文/日文输入法合成期间不触碰 DOM，保证不丢字、不断字。
-- **小体积**：运行时全量（JS + CSS + 两套主题）gzip 预算 ≤ 25 KB（估算约 20 KB，见 architecture.md 体积预算）。
+- **小体积**：全量（JS + CSS）gzip 实测约 **13.6 KB**（JS 13.1 + CSS 0.5，Vite 构建），预算 ≤ 25 KB（D28）余量充足。
 
 ## 功能范围（已锁定）
 
@@ -59,6 +59,18 @@
 | M1 解析层 | ✅ 完成 | `parseLines` / `parseInline` 等纯函数，golden 测试全通过（`npm test`，33 例）。HTML 序列化管线（`markdownToHtml`）曾作为过渡产物存在，已随 D36 删除 |
 | M2 编辑面 | ✅ 完成 | contenteditable 行块渲染、活动块源码化、选区双向映射、块级 undo、IME 防护、粘贴纯文本化、简单表格（D35）、只读、主题。编辑面为 light DOM（Shadow DOM 的 Selection API 在 WebKit 不穿透，曾导致真实输入全部失效） |
 | M3 打磨 | ⬜ 未开始 | 真机 IME 手动验证、边缘案例打磨、打包产物 |
+
+## 开发与构建
+
+```bash
+npm install        # 安装 devDependencies（仅 vite；运行时仍零依赖）
+npm test           # 解析层 golden 测试（node --test）
+npm run dev        # 本地开发：http://localhost:5173/
+npm run build      # 打包演示页到 dist/（Vite，含体积/gzip 报告）
+npm run preview    # 本地预览构建产物（/AetherMarkdown/ 路径）
+```
+
+推送到 `main` 会触发 GitHub Actions：跑全量测试 → Vite 构建 → 部署 GitHub Pages（需在 Settings → Pages → Source 选择 **GitHub Actions**），站点地址 `https://suulnnka.github.io/AetherMarkdown/`。
 
 ## 快速开始
 

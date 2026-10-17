@@ -28,7 +28,9 @@ src/
     selection.js      // DOM ↔ 源偏移 双向映射
 theme/                // 两套普通 CSS（CSS 变量取值）
 test/parse/           // Node golden 测试（33 例，npm test）
-docs/                 // 文档 + 演示页 index.html（python3 -m http.server 后访问 /docs/）
+demo/                 // 演示页（Vite 入口；npm run dev 本地开发，npm run build 打包到 dist/）
+dist/                 // 构建产物（gitignore；CI 构建并部署 GitHub Pages）
+.github/workflows/    // CI：测试 → 构建 → Pages 部署
 ```
 
 各层均为纯浏览器 JS（ES Module），零依赖。实际代码量（含注释）：
@@ -142,6 +144,6 @@ Unit {
 
 ## 13. 测试策略
 
-- **解析层**（test/parse/，Node 直接跑，毫秒级）：golden 用例覆盖行块种类与字段（lines.test.js）、行内 token 与偏移（inline.test.js）、安全边界直测（security.test.js：sanitizeUrl 协议白名单 + HTML 字面化）。
+- **解析层**（test/parse/，Node 直接跑，毫秒级）：golden 用例覆盖行块种类与字段（lines.test.js）、行内 token 与偏移（inline.test.js）、安全边界直测（security.test.js：sanitizeUrl 协议白名单 + HTML 字面化）。CI（GitHub Actions）每次推送跑全量测试 + Vite 构建 + Pages 部署。
 - **编辑层**：无自动化基建（零依赖约束下不引入 DOM 模拟），以 demo 页手动冒烟为准：输入、Enter/Shift+Enter、表格、代码块、列表/引用、undo/redo、粘贴、主题/只读切换。
 - **回归重点**：光标不跳（编辑态 DOM 与源切片逐字节一致是前提）、IME 不断字、undo 后光标还原。

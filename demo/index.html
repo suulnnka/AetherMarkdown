@@ -47,7 +47,7 @@
       });
       setTimeout(function () {
         if (!window.__aetherBooted) {
-          show('编辑器未能加载。请通过 HTTP 服务打开本页（如在项目目录运行 python3 -m http.server 后访问 http://localhost:8000/demo/），直接双击 HTML 文件会被浏览器拦截模块加载。');
+          show('编辑器未能加载。请通过 npm run dev 启动开发服务器（或任意静态 HTTP 服务，如项目目录运行 python3 -m http.server 后访问 http://localhost:8000/demo/），直接双击 HTML 文件会被浏览器拦截模块加载。');
         }
       }, 2000);
     })();
