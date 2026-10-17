@@ -28,7 +28,7 @@ src/
     selection.js      // DOM ↔ 源偏移 双向映射
 theme/                // 两套普通 CSS（CSS 变量取值）
 test/parse/           // Node golden 测试（33 例，npm test）
-demo/                 // 静态演示页（python3 -m http.server 后访问 /demo/）
+docs/                 // 文档 + 演示页 index.html（python3 -m http.server 后访问 /docs/）
 ```
 
 各层均为纯浏览器 JS（ES Module），零依赖。实际代码量（含注释）：
