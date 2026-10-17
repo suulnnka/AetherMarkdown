@@ -1,0 +1,22 @@
+{
+  "name": "aether-markdown",
+  "version": "0.1.0",
+  "description": "零依赖的浏览器 Markdown 所见即所得编辑器（行块模型）",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./theme/*": "./theme/*"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "src",
+    "theme"
+  ],
+  "license": "MIT"
+}

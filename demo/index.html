@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AetherMarkdown · M2 Demo</title>
+  <link rel="stylesheet" href="../theme/light.css">
+  <link rel="stylesheet" href="../theme/dark.css">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, 'PingFang SC', sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #1f2328;
+      background: #fff;
+    }
+    body.dark { background: #0d1117; color: #e6edf3; }
+    h1 small { font-weight: 400; opacity: 0.5; font-size: 0.5em; }
+    .box { border: 1px solid #d0d7de; border-radius: 8px; padding: 1rem 1.25rem; }
+    body.dark .box { border-color: #30363d; }
+    #out {
+      background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px;
+      padding: 0.75rem 1rem; min-height: 3rem; white-space: pre-wrap;
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
+    }
+    body.dark #out { background: #161b22; border-color: #30363d; }
+    button { padding: 0.4rem 0.9rem; margin-right: 0.5rem; cursor: pointer; }
+    .toolbar { margin: 1rem 0; }
+    /* 宿主自己的图片放大浮层（D12 修订：库只发 imageClick 事件，展示由宿主实现） */
+    #lightbox {
+      position: fixed; inset: 0; background: rgba(255, 255, 255, 0.92);
+      display: flex; align-items: center; justify-content: center; cursor: zoom-out;
+    }
+    #lightbox img { max-width: 92vw; max-height: 92vh; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2); }
+  </style>
+</head>
+<body>
+  <h1>AetherMarkdown <small>M2 编辑面 Demo</small></h1>
+  <div id="boot-err" style="display:none;color:#cf222e;border:1px solid #cf222e;border-radius:6px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:14px"></div>
+  <script>
+    (function () {
+      var box = document.getElementById('boot-err');
+      function show(msg) { box.textContent = msg; box.style.display = 'block'; }
+      window.addEventListener('error', function (e) {
+        show('脚本错误：' + (e.message || 'unknown'));
+      });
+      setTimeout(function () {
+        if (!window.__aetherBooted) {
+          show('编辑器未能加载。请通过 HTTP 服务打开本页（如在项目目录运行 python3 -m http.server 后访问 http://localhost:8000/demo/），直接双击 HTML 文件会被浏览器拦截模块加载。');
+        }
+      }, 2000);
+    })();
+  </script>
+  <div class="toolbar">
+    <button id="btn-theme">切换主题</button>
+    <button id="btn-ro">切换只读</button>
+    <button id="btn-reset">重置文档</button>
+  </div>
+  <div class="box"><div id="editor"></div></div>
+  <h3>getValue()</h3>
+  <div id="out"></div>
+
+  <script type="module">
+    import { MarkdownEditor } from '../src/index.js';
+
+    const SAMPLE = [
+      '# 欢迎使用 AetherMarkdown',
+      '',
+      '这是一个**零依赖**的浏览器 Markdown 编辑器，光标所在的块显示 *源码*，移开后立即渲染。',
+      '',
+      '## 二级标题',
+      '',
+      '### 三级标题',
+      '',
+      '## 常用语法',
+      '',
+      '- 无序列表（回车只换行，标记自己写）',
+      '- 嵌套列表用 `Tab`',
+      '  - 子项',
+      '- [x] 已完成任务',
+      '- [ ] 待办任务',
+      '',
+      '1. 有序列表',
+      '2. 自动编号',
+      '',
+      '简单表格（不区分表头，单元格支持行内样式）：',
+      '',
+      '| 语法 | 说明 |',
+      '| --- | --- |',
+      '| **粗体** | `**文本**` |',
+      '| [链接](https://example.com) | 单元格里也可以有 `code` |',
+      '| 转义竖线 a\\|b | 最后一个单元格 |',
+      '',
+      '> 引用块：`>` 需自己写，回车只换行。',
+      '>> 深一层',
+      '',
+      '```js',
+      'const x = 1; // 代码块（无高亮）',
+      '```',
+      '',
+      '---',
+      '',
+      '图片（尺寸受约束，点击放大）：',
+      '',
+      '![占位图](https://picsum.photos/seed/aether/900/500)',
+      '',
+      '行内还有 `code`、~~删除线~~、[链接](https://example.com) 与自动链接 https://example.com 。硬换行：',
+      '下一行。',
+    ].join('\n');
+
+    window.__aetherBooted = true;
+    window.__AetherMarkdown = MarkdownEditor; // 调试/测试钩子
+    const ed = new MarkdownEditor({ target: document.getElementById('editor'), value: SAMPLE });
+    window.__ed = ed; // 调试/测试钩子
+    const out = document.getElementById('out');
+    ed.on('change', (v) => { out.textContent = v; });
+    out.textContent = ed.getValue();
+
+    let dark = false;
+    document.getElementById('btn-theme').onclick = () => {
+      dark = !dark;
+      ed.setTheme(dark ? 'dark' : 'light');
+      document.body.classList.toggle('dark', dark);
+    };
+    document.getElementById('btn-ro').onclick = () => ed.setReadonly(!ed.readonly);
+    document.getElementById('btn-reset').onclick = () => ed.setValue(SAMPLE);
+
+    // 图片点击放大：宿主侧实现（监听 imageClick 事件）
+    const lightbox = (src) => {
+      const box = document.createElement('div');
+      box.id = 'lightbox';
+      const img = new Image();
+      img.src = src;
+      box.append(img);
+      box.onclick = () => box.remove();
+      document.body.append(box);
+    };
+    ed.on('imageClick', lightbox);
+  </script>
+</body>
+</html>

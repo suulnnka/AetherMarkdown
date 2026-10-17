@@ -1,0 +1,27 @@
+/* AetherMarkdown 亮色主题（docs/theme.md）
+   作用于宿主元素（light DOM），CSS 自定义属性直接生效。 */
+
+.aether-host {
+  --md-font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --md-font-size: 16px;
+  --md-heading-weight: 600;
+  --md-content-width: 800px;
+  --md-code-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --md-code-font-size: 0.9em;
+
+  --md-text: #1f2328;
+  --md-text-secondary: #656d76;
+  --md-border: #d0d7de;
+  --md-link: #0969da;
+  --md-pre-bg: #f6f8fa;
+  --md-quote-border: #d0d7de;
+  --md-quote-text: #656d76;
+  --md-hr: #d0d7de;
+  --md-selection-bg: rgba(9, 105, 218, 0.25);
+  --md-caret: #1f2328;
+  --md-checkbox: #0969da;
+  --md-marker: #6e7781;
+
+  --md-br-hard-gap: 0;
+  --md-img-max-height: 75vh;
+}

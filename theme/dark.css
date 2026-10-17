@@ -1,0 +1,21 @@
+/* AetherMarkdown 暗色主题（docs/theme.md）
+   通过宿主元素 data-theme="dark" 生效；亮色主题必须同时导入。 */
+
+.aether-host[data-theme='dark'] {
+  --md-font-size: 16px;
+
+  --md-text: #e6edf3;
+  --md-text-secondary: #8b949e;
+  --md-border: #30363d;
+  --md-link: #58a6ff;
+  --md-pre-bg: #161b22;
+  --md-quote-border: #3d444d;
+  --md-quote-text: #8b949e;
+  --md-hr: #30363d;
+  --md-selection-bg: rgba(88, 166, 255, 0.35);
+  --md-caret: #e6edf3;
+  --md-checkbox: #58a6ff;
+  --md-marker: #8b949e;
+
+  --md-br-hard-gap: 0;
+}
