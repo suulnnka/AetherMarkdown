@@ -206,17 +206,30 @@ export class MarkdownEditor {
     if (c) return c;
     const pos = this._readCaretPos();
     if (!pos || pos.node !== this._surface) return null;
-    // (surface, k) 的 k 即子元素序号：0 → 首行行首；k ≥ 子数 → 末行行尾；
-    // 其余 → 第 k 行行首（点击行间空隙/边带时落在紧邻行）
+    // (surface, k) 的 k 即子元素序号。边界紧邻分隔符时落到分隔符行
+    // （srcOff 行尾）：键盘上下穿越进入 --- 编辑态，而非停在元素边界的虚空行；
+    // 其余：0 → 首行行首；k ≥ 子数 → 末行行尾；否则第 k 行行首（点行间空隙落紧邻行）
     const kids = this._surface.children;
     if (!kids.length) return null;
     const k = Math.max(0, Math.min(pos.offset, kids.length));
     const last = k === kids.length;
-    const elu = last ? kids[kids.length - 1] : kids[k];
+    let elu;
+    if (!last && kids[k].classList.contains('md-hr')) {
+      elu = kids[k];
+    } else if (!last && k > 0 && kids[k - 1].classList.contains('md-hr')) {
+      elu = kids[k - 1];
+    } else {
+      elu = last ? kids[kids.length - 1] : kids[k];
+    }
     const id = elu && elu.dataset ? Number(elu.dataset.id) : NaN;
     const u = !Number.isNaN(id) && this.doc.unitById(id);
     if (!u) return null;
-    return { unit: u, el: elu, node: elu, nodeOff: last ? elu.childNodes.length : 0 };
+    const isHr = elu.classList.contains('md-hr') && !elu.classList.contains('md-active');
+    const nodeOff = isHr ? 0 : last ? elu.childNodes.length : 0;
+    // srcOff：分隔符行显式取行尾（其渲染元素无子节点，常规映射只能得到行首）
+    const res = { unit: u, el: elu, node: elu, nodeOff };
+    if (isHr) res.srcOff = u.range[1];
+    return res;
   }
 
   _pointSrcOff(node, offset) {
@@ -272,7 +285,7 @@ export class MarkdownEditor {
     if (c.el.classList.contains('md-active')) {
       return { unit: c.unit, srcOff: c.unit.range[0] + charOffsetIn(c.el, c.node, c.nodeOff) };
     }
-    const srcOff = this._renderedSrcOff(c);
+    const srcOff = c.srcOff ?? this._renderedSrcOff(c);
     this._activate(c.unit, srcOff - c.unit.range[0]);
     return { unit: c.unit, srcOff };
   }
@@ -476,9 +489,17 @@ export class MarkdownEditor {
       if (!this._surface.contains(r.startContainer)) return;
       if (!sel.isCollapsed) return;
       const c = this._actionableCaret();
-      if (!c || c.unit.id === this._activeId) return;
+      if (!c) return;
+      if (c.unit.id === this._activeId) {
+        // 光标停在 surface 层级而该行已是活动行（键盘跨过元素边界）：
+        // 拉回单元内，避免停在虚空位置（随后的输入会落到单元外被清掉）
+        if (!c.srcOff && c.el.classList.contains('md-active')) setCollapsed(c.el, c.nodeOff);
+        return;
+      }
       let elOff = 0;
-      if (c.el.classList.contains('md-active')) {
+      if (c.srcOff != null) {
+        elOff = c.srcOff - c.unit.range[0];
+      } else if (c.el.classList.contains('md-active')) {
         elOff = charOffsetIn(c.el, c.node, c.nodeOff);
       } else {
         elOff = Math.max(0, this._renderedSrcOff(c) - c.unit.range[0]);

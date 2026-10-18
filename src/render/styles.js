@@ -28,7 +28,7 @@ export const BASE_CSS = `
 .aether-host .md-line + .md-line { margin-top: var(--md-line-gap, 0.4em); }
 .aether-host .md-item-line + .md-line, .aether-host .md-line + .md-item-line, .aether-host .md-item-line + .md-item-line { margin-top: var(--md-item-gap, 0.25em); }
 .aether-host .md-quote-line + .md-line, .aether-host .md-line + .md-quote-line, .aether-host .md-quote-line + .md-quote-line { margin-top: var(--md-item-gap, 0.25em); }
-.aether-host .md-line.md-hr { margin: 0; padding: 1em 0; background-image: linear-gradient(var(--md-hr, #d0d7de), var(--md-hr, #d0d7de)); background-size: 100% 1px; background-position: center; background-repeat: no-repeat; }
+.aether-host .md-line.md-hr { border: none; margin: 0; padding: 1em 0; background-image: linear-gradient(var(--md-hr, #d0d7de), var(--md-hr, #d0d7de)); background-size: 100% 1px; background-position: center; background-repeat: no-repeat; }
 .aether-host .md-hr + .md-line { margin-top: 0; }
 .aether-host .md-line.md-hr.md-active { background-image: none; }
 .aether-host .md-line.md-gap-short { margin-top: var(--md-br-hard-gap, 0) !important; }
