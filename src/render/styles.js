@@ -16,7 +16,7 @@
 //    进出编辑态高度不变
 //  - 代码块/表格：仅有的两个跨行结构；宽表格横向滚动
 //  - 编辑态：整行源码显示，标记前缀（## / - / 1. / > 等）行内排在行首，
-//    前导缩进空格以 md-indent 零宽收纳（视觉缩进由 marginLeft 表达）
+//    前导空格按源码字面占位（pre-wrap），不做缩进加工（D39）
 //  - 图片：尺寸约束（D27），zoom-in 光标提示可点击（imageClick 交宿主）
 
 export const BASE_CSS = `
@@ -57,7 +57,6 @@ export const BASE_CSS = `
 .aether-host .md-td { border: 1px solid var(--md-border, #d0d7de); padding: 0.3em 0.65em; vertical-align: top; }
 .aether-host .md-active { position: relative; white-space: pre-wrap; min-height: 1.2em; }
 .aether-host .md-marker { color: var(--md-marker, #6e7781); }
-.aether-host .md-indent { display: inline-block; width: 0; height: 0; overflow: hidden; white-space: pre; }
 .aether-host .md-pre.md-active[data-lang]::before { display: none; }
 .aether-host .md-link { color: var(--md-link, #0969da); text-decoration: none; cursor: pointer; }
 .aether-host .md-link:hover { text-decoration: underline; }

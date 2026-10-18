@@ -17,7 +17,7 @@ const FENCE_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const HR_RE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const HEADING_RE = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/;
 const QUOTE_PREFIX_RE = /^ {0,3}(>+) ?/;
-const MARKER_RE = /^ {0,3}(?:([-+*])|(\d{1,9})([.)]))(?:[ \t]+|$)/;
+const MARKER_RE = /^ *(?:([-+*])|(\d{1,9})([.)]))(?:[ \t]+|$)/;
 const TASK_RE = /^\[([ xX])][ \t]+/;
 
 export function parseLines(src) {

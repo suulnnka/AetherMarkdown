@@ -5,10 +5,10 @@
 // 渲染态：主语法转为视觉元素——列表行行首显示项目符号/自身编号/复选框（行内、后接正文），
 //         引用行画层级竖线（`>>` 深一层，正文随层数右移），标题/文字/空行/分割线各自独立，
 //         代码块与表格是仅有的两个跨行结构（表格渲染 <table>，单元格仅行内样式）。
-// 编辑态：显示整行源码，标记前缀（## / - / 1. / > 等）以 md-marker 弱化并排于行首，
-//         与渲染态符号同一起点、正文跟随；前导缩进空格以 md-indent 零宽收纳
-//         （视觉缩进由 marginLeft 表达，字节保留）。引用编辑态不画竖线
-//         （> 标记即层级指示），仅保留缩进。DOM 纯文本与源切片逐字节一致（幂等同步前提）。
+// 编辑态：显示整行源码，标记前缀（含前导缩进空格，## / - / 1. / > 等）以 md-marker
+//         弱化并排于行首，空格按源码字面占位（pre-wrap），不做缩进加工（D39）。
+//         引用编辑态不画竖线（> 标记即层级指示），仅保留缩进。
+//         DOM 纯文本与源切片逐字节一致（幂等同步前提）。
 // 文本节点携带 __src（内容坐标），是渲染态光标 → 源偏移映射的依据。
 
 import { parseInline } from '../parse/inline.js';
@@ -105,13 +105,6 @@ function markerSpan(text, extraCls) {
   return sp;
 }
 
-// 前导缩进空格：零宽收纳（视觉缩进由 marginLeft 表达），字节保留在 DOM
-function indentSpan(text) {
-  const sp = el('span', 'md-indent');
-  sp.textContent = text;
-  return sp;
-}
-
 // 行内 token：内容正常渲染，嵌套标记（如 ***x*** 的收尾 *）弱化
 function editToken(tk, sliceBase, slice, into) {
   const piece = slice.slice(sliceBase + tk.s, sliceBase + tk.e);
@@ -160,16 +153,11 @@ function editToken(tk, sliceBase, slice, into) {
   }
 }
 
-// 单行块的编辑态内容：前导空格零宽收纳 + 其余前缀行内弱化 + 行内 token + 行尾弱化
+// 单行块的编辑态内容：前缀（含前导空格，pre-wrap 下按源码字面占位）弱化 + 行内 token + 行尾弱化
 function editLineContent(u, doc, parent) {
   const slice = doc.source.slice(u.range[0], u.range[1]);
   const prefixLen = u.textStart - u.range[0];
-  if (prefixLen > 0) {
-    const prefix = slice.slice(0, prefixLen);
-    const ws = /^[ ]*/.exec(prefix)[0].length;
-    if (ws > 0) parent.append(indentSpan(prefix.slice(0, ws)));
-    if (ws < prefixLen) parent.append(markerSpan(prefix.slice(ws), 'md-prefix'));
-  }
+  if (prefixLen > 0) parent.append(markerSpan(slice.slice(0, prefixLen), 'md-prefix'));
   appendInlineEdit(u, slice.slice(prefixLen), prefixLen, parent);
 }
 
@@ -287,7 +275,7 @@ export function buildActiveElement(u, doc) {
     appendInlineEdit(u, rest, u.textStart - u.range[0], e);
   }
   else editLineContent(u, doc, e);
-  if (u.kind === 'item') e.style.marginLeft = itemIndent(u) + 'em';
+  // 渲染态嵌套缩进由 marginLeft 表达；编辑态不做缩进加工，前导空格按源码字面显示
   return e;
 }
 

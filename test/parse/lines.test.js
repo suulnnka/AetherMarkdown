@@ -159,3 +159,10 @@ test('表格单元 range 可整体切片还原（含行间换行）', () => {
   assert.equal(slice(src, bs[1]), '| a | b |\n| --- | --- |\n| c | d |');
   assert.equal(bs[1].lines.length, 3);
 });
+
+test('列表深层缩进：任意前导空格仍是列表项（每 2 空格一级）', () => {
+  const src = '- 一级\n  - 二级\n    - 三级\n      - 四级';
+  const bs = parseLines(src);
+  assert.ok(bs.every((u) => u.kind === 'item'));
+  assert.deepEqual(bs.map((u) => u.indent), [0, 2, 4, 6]);
+});
