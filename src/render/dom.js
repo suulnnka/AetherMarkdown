@@ -125,6 +125,8 @@ function editToken(tk, sliceBase, slice, into) {
     case 'link': {
       const tag = { strong: 'strong', em: 'em', del: 'del', link: 'span' }[tk.t];
       const c = el(tag, tk.t === 'link' ? 'md-link md-link-edit' : 'md-' + tk.t);
+      // 编辑态链接携带原始 href：点击 URL 尾部 / Cmd+Ctrl 点击时打开（surface.js）
+      if (tk.t === 'link' && tk.href) c.dataset.href = tk.href;
       let cur = tk.s;
       for (const child of tk.c) {
         if (child.s > cur) c.append(markerSpan(slice.slice(sliceBase + cur, sliceBase + child.s)));

@@ -10,6 +10,7 @@ import { Document } from '../core/document.js';
 import { UndoStack } from '../core/undo.js';
 import { renderDoc, buildActiveElement } from '../render/dom.js';
 import { BASE_CSS } from '../render/styles.js';
+import { sanitizeUrl } from '../parse/entities.js';
 import { handleKeydown } from './keyboard.js';
 import {
   extractText,
@@ -523,6 +524,16 @@ export class MarkdownEditor {
     if (a) {
       e.preventDefault();
       window.open(a.href, '_blank', 'noopener');
+      return;
+    }
+
+    // 编辑态链接（span，携带 dataset.href）：点击 URL 尾部（弱化标记）或
+    // Cmd/Ctrl+点击任意部分 → 打开；点击链接文本本身仍是落光标编辑
+    const le = t.closest('.md-link-edit');
+    if (le && le.dataset.href && (t.closest('.md-marker') || e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      const href = sanitizeUrl(le.dataset.href);
+      if (href) window.open(href, '_blank', 'noopener');
       return;
     }
     // 图片点击：放大展示由宿主处理（imageClick 事件，D12 修订）。
