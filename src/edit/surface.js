@@ -206,13 +206,17 @@ export class MarkdownEditor {
     if (c) return c;
     const pos = this._readCaretPos();
     if (!pos || pos.node !== this._surface) return null;
-    const units = this.doc.units;
-    if (!units.length) return null;
-    const first = pos.offset === 0;
-    const u = first ? units[0] : units[units.length - 1];
-    const elu = this._findEl(u.id);
-    if (!elu) return null;
-    return { unit: u, el: elu, node: elu, nodeOff: first ? 0 : elu.childNodes.length };
+    // (surface, k) 的 k 即子元素序号：0 → 首行行首；k ≥ 子数 → 末行行尾；
+    // 其余 → 第 k 行行首（点击行间空隙/边带时落在紧邻行）
+    const kids = this._surface.children;
+    if (!kids.length) return null;
+    const k = Math.max(0, Math.min(pos.offset, kids.length));
+    const last = k === kids.length;
+    const elu = last ? kids[kids.length - 1] : kids[k];
+    const id = elu && elu.dataset ? Number(elu.dataset.id) : NaN;
+    const u = !Number.isNaN(id) && this.doc.unitById(id);
+    if (!u) return null;
+    return { unit: u, el: elu, node: elu, nodeOff: last ? elu.childNodes.length : 0 };
   }
 
   _pointSrcOff(node, offset) {

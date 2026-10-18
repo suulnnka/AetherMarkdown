@@ -28,8 +28,9 @@ export const BASE_CSS = `
 .aether-host .md-line + .md-line { margin-top: var(--md-line-gap, 0.4em); }
 .aether-host .md-item-line + .md-line, .aether-host .md-line + .md-item-line, .aether-host .md-item-line + .md-item-line { margin-top: var(--md-item-gap, 0.25em); }
 .aether-host .md-quote-line + .md-line, .aether-host .md-line + .md-quote-line, .aether-host .md-quote-line + .md-quote-line { margin-top: var(--md-item-gap, 0.25em); }
-.aether-host .md-line.md-hr { margin: 1em 0; }
-.aether-host .md-line.md-hr:not(.md-active) { border: none; border-top: 1px solid var(--md-hr, #d0d7de); }
+.aether-host .md-line.md-hr { margin: 0; padding: 1em 0; background-image: linear-gradient(var(--md-hr, #d0d7de), var(--md-hr, #d0d7de)); background-size: 100% 1px; background-position: center; background-repeat: no-repeat; }
+.aether-host .md-hr + .md-line { margin-top: 0; }
+.aether-host .md-line.md-hr.md-active { background-image: none; }
 .aether-host .md-line.md-gap-short { margin-top: var(--md-br-hard-gap, 0) !important; }
 .aether-host .md-h1, .aether-host .md-h2, .aether-host .md-h3, .aether-host .md-h4, .aether-host .md-h5, .aether-host .md-h6 { font-weight: var(--md-heading-weight, 600); line-height: 1.3; margin-top: 1em; }
 .aether-host .md-h1 { font-size: 1.7em; }
