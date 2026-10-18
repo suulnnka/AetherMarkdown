@@ -264,6 +264,18 @@ export class MarkdownEditor {
 
   _finishEdit(caretOff, { typing = false } = {}) {
     if (caretOff == null) caretOff = 0;
+    // 光标落在不可编辑单元（hr）上——如整行输入成 ---：顺移到下一可编辑行行首；
+    // 其后没有可编辑行（hr 为末行）则补一个空行承接光标
+    if (!this.doc.editableAt(caretOff)) {
+      const next = this.doc.units.find((u) => u.editable && u.range[0] >= caretOff);
+      if (next) {
+        caretOff = next.range[0];
+      } else {
+        this.doc.splice(this.doc.source.length, this.doc.source.length, '\n');
+        this.doc.rebuild();
+        caretOff = this.doc.source.length;
+      }
+    }
     this._lastCaret = caretOff;
     const containing = this.doc.editableAt(caretOff);
     const activeChanged = !containing || containing.id !== this._activeId;
@@ -485,6 +497,19 @@ export class MarkdownEditor {
           const srcOff = img.__src ? contentToSrc(unit, img.__src[0]) : unit.range[0];
           this._activate(unit, srcOff - unit.range[0]);
         }
+      }
+      return;
+    }
+
+    // 分隔符不可编辑（无文本可落光标）：点击 = 光标到下一行行首（行首退格即删该行）
+    if (!this.readonly) {
+      const hr = t.closest('hr.md-hr');
+      if (hr) {
+        e.preventDefault();
+        const sib = hr.nextElementSibling;
+        const id = sib && sib.dataset ? Number(sib.dataset.id) : NaN;
+        const unit = !Number.isNaN(id) && this.doc.unitById(id);
+        if (unit && unit.editable) this._activate(unit, 0);
       }
     }
   }

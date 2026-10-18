@@ -97,9 +97,15 @@ export class Document {
     return u.range[0];
   }
 
-  // 与上一行合并：删除行边界（并清上一行行尾硬换行空格）
+  // 与上一行合并：删除行边界（并清上一行行尾硬换行空格）。
+  // 紧邻上一行是不可编辑单元（hr）时只删该行本身，不合并上下文本
   joinPrev(u) {
     const idx = this.units.indexOf(u);
+    const adj = this.units[idx - 1];
+    if (adj && !adj.editable) {
+      this.splice(adj.range[0], u.range[0], '');
+      return adj.range[0];
+    }
     let prev = null;
     for (let i = idx - 1; i >= 0; i--) {
       if (this.units[i].editable) { prev = this.units[i]; break; }
@@ -111,9 +117,15 @@ export class Document {
     return s;
   }
 
-  // 与下一行合并（行尾 Delete）：行直接拼接，无分隔符
+  // 与下一行合并（行尾 Delete）：行直接拼接，无分隔符。
+  // 紧邻下一行是不可编辑单元（hr）时只删该行本身（连同其后换行符）
   joinNext(u) {
     const idx = this.units.indexOf(u);
+    const adj = this.units[idx + 1];
+    if (adj && !adj.editable) {
+      this.splice(adj.range[0], adj.range[1] + 1, '');
+      return u.range[1];
+    }
     let next = null;
     for (let i = idx + 1; i < this.units.length; i++) {
       if (this.units[i].editable) { next = this.units[i]; break; }
