@@ -53,8 +53,6 @@ export class Document {
         u.id = UID++;
       }
     }
-    for (const u of fresh) u.editable = u.kind !== 'hr';
-
     this.units = fresh;
   }
 
@@ -68,7 +66,7 @@ export class Document {
 
   editableAt(srcOff) {
     for (const u of this.units) {
-      if (u.editable && u.range[0] <= srcOff && srcOff <= u.range[1]) return u;
+      if (u.range[0] <= srcOff && srcOff <= u.range[1]) return u;
     }
     return null;
   }
@@ -91,6 +89,9 @@ export class Document {
         : slice.replace(/^ {0,3}(?:[-+*]|\d{1,9}[.)])(?: \[[ xX]\])?[ \t]?/, '');
     } else if (u.kind === 'quote') {
       stripped = slice.replace(/^ {0,3}> ?/, '');
+    } else if (u.kind === 'hr') {
+      // 分隔符可编辑（D38）：行首退格删一个标记字符，少于 3 个即成普通行
+      stripped = slice.slice(1);
     }
     if (stripped == null || stripped === slice) return null;
     this.splice(u.range[0], u.range[1], stripped);
@@ -98,19 +99,16 @@ export class Document {
   }
 
   // 与上一行合并：删除行边界（并清上一行行尾硬换行空格）。
-  // 紧邻上一行是不可编辑单元（hr）时只删该行本身，不合并上下文本
+  // 上一行是分隔符时不合并——退格删其末尾一个标记字符（--- → --，即成普通行）
   joinPrev(u) {
     const idx = this.units.indexOf(u);
-    const adj = this.units[idx - 1];
-    if (adj && !adj.editable) {
-      this.splice(adj.range[0], u.range[0], '');
-      return adj.range[0];
-    }
-    let prev = null;
-    for (let i = idx - 1; i >= 0; i--) {
-      if (this.units[i].editable) { prev = this.units[i]; break; }
-    }
+    const prev = idx > 0 ? this.units[idx - 1] : null;
     if (!prev) return null;
+    if (prev.kind === 'hr') {
+      const s = prev.range[1] - 1;
+      this.splice(s, prev.range[1], '');
+      return s;
+    }
     let s = prev.range[1];
     while (s > prev.range[0] && this.source[s - 1] === ' ') s--;
     this.splice(s, u.range[0], '');
@@ -118,19 +116,20 @@ export class Document {
   }
 
   // 与下一行合并（行尾 Delete）：行直接拼接，无分隔符。
-  // 紧邻下一行是不可编辑单元（hr）时只删该行本身（连同其后换行符）
+  // 自己是分隔符时删自身末尾一个标记字符；下一行是分隔符时删其行首一个字符
   joinNext(u) {
+    if (u.kind === 'hr') {
+      const e = u.range[1] - 1;
+      this.splice(e, u.range[1], '');
+      return e;
+    }
     const idx = this.units.indexOf(u);
-    const adj = this.units[idx + 1];
-    if (adj && !adj.editable) {
-      this.splice(adj.range[0], adj.range[1] + 1, '');
+    const next = idx >= 0 && idx + 1 < this.units.length ? this.units[idx + 1] : null;
+    if (!next) return null;
+    if (next.kind === 'hr') {
+      this.splice(next.range[0], next.range[0] + 1, '');
       return u.range[1];
     }
-    let next = null;
-    for (let i = idx + 1; i < this.units.length; i++) {
-      if (this.units[i].editable) { next = this.units[i]; break; }
-    }
-    if (!next) return null;
     let e = u.range[1];
     while (e > u.range[0] && this.source[e - 1] === ' ') e--;
     this.splice(e, next.range[0], '');

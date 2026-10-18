@@ -232,6 +232,7 @@ function activeTagCls(u) {
     case 'quote': return { tag: 'div', cls: 'md-quote-line' };
     case 'code': return { tag: 'pre', cls: 'md-pre' };
     case 'table': return { tag: 'div', cls: 'md-table' };
+    case 'hr': return { tag: 'p', cls: 'md-hr' }; // 编辑态显示 --- 源码（保 1em 间距，不画线）
     default: return { tag: 'p', cls: 'md-p' }; // text / blank
   }
 }
@@ -305,8 +306,12 @@ function renderedBlock(u, doc) {
       inlineDom(parseInline(u.text), e);
       return e;
     }
-    case 'hr':
-      return el('hr', 'md-hr md-line');
+    case 'hr': {
+      // 渲染态是 <hr> 无文本，点击激活需 data-id（编辑态见 activeTagCls）
+      const e = el('hr', 'md-hr md-line');
+      e.dataset.id = u.id;
+      return e;
+    }
     case 'blank': {
       const e = el('p', 'md-p md-blank md-line');
       e.dataset.id = u.id;
@@ -382,7 +387,7 @@ export function renderDoc(surface, doc, activeId) {
   surface.replaceChildren();
   let prevHard = false; // 上一行是否以硬换行（两空格）结尾 → 本行短间距
   for (const u of doc.units) {
-    const e = u.id === activeId && u.editable ? buildActiveElement(u, doc) : renderedBlock(u, doc);
+    const e = u.id === activeId ? buildActiveElement(u, doc) : renderedBlock(u, doc);
     if (prevHard) e.classList.add('md-gap-short');
     surface.append(e);
     prevHard = u.kind !== 'code' && / {2}$/.test(doc.source.slice(u.range[0], u.range[1]));

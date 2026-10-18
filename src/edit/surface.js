@@ -82,7 +82,7 @@ export class MarkdownEditor {
   focus(position) {
     this._checkAlive();
     this._surface.focus();
-    const units = this.doc.units.filter((u) => u.editable);
+    const units = this.doc.units;
     let target = null;
     if (position === 'end') target = units[units.length - 1];
     else if (position === 'start' || !this._lastCaret) target = units[0];
@@ -206,7 +206,7 @@ export class MarkdownEditor {
     if (c) return c;
     const pos = this._readCaretPos();
     if (!pos || pos.node !== this._surface) return null;
-    const units = this.doc.units.filter((u) => u.editable);
+    const units = this.doc.units;
     if (!units.length) return null;
     const first = pos.offset === 0;
     const u = first ? units[0] : units[units.length - 1];
@@ -282,18 +282,6 @@ export class MarkdownEditor {
 
   _finishEdit(caretOff, { typing = false } = {}) {
     if (caretOff == null) caretOff = 0;
-    // 光标落在不可编辑单元（hr）上——如整行输入成 ---：顺移到下一可编辑行行首；
-    // 其后没有可编辑行（hr 为末行）则补一个空行承接光标
-    if (!this.doc.editableAt(caretOff)) {
-      const next = this.doc.units.find((u) => u.editable && u.range[0] >= caretOff);
-      if (next) {
-        caretOff = next.range[0];
-      } else {
-        this.doc.splice(this.doc.source.length, this.doc.source.length, '\n');
-        this.doc.rebuild();
-        caretOff = this.doc.source.length;
-      }
-    }
     this._lastCaret = caretOff;
     const containing = this.doc.editableAt(caretOff);
     const activeChanged = !containing || containing.id !== this._activeId;
@@ -325,7 +313,7 @@ export class MarkdownEditor {
   _onInput() {
     if (this._destroyed || this.readonly || this._composing) return;
     const u = this.doc.unitById(this._activeId);
-    if (!u || !u.editable) return;
+    if (!u) return;
     const elu = this._findEl(u.id);
     if (!elu || !elu.classList.contains('md-active')) return;
     const text = extractText(elu);
@@ -498,7 +486,9 @@ export class MarkdownEditor {
   _onMouseDown(e) {
     if (this.readonly) return; // 只读态保留原生文本选择
     const t = e.target;
-    if (t instanceof Element && (t.closest('a') || t.closest('img.md-img'))) e.preventDefault();
+    // 链接/图片/分隔符上按下不落光标：否则 selectionchange 先激活/抢占，
+    // DOM 被替换后 click 落点失效（链接打不开、分隔符点不中）
+    if (t instanceof Element && (t.closest('a') || t.closest('img.md-img') || t.closest('hr.md-hr'))) e.preventDefault();
   }
 
   _onClick(e) {
@@ -528,15 +518,15 @@ export class MarkdownEditor {
       return;
     }
 
-    // 分隔符不可编辑（无文本可落光标）：点击 = 光标到下一行行首（行首退格即删该行）
+    // 分隔符可编辑（D38）但渲染态是 <hr> 无文本可落光标：
+    // 点击 = 激活该行（编辑态显示 --- 源码，光标行尾）
     if (!this.readonly) {
       const hr = t.closest('hr.md-hr');
       if (hr) {
         e.preventDefault();
-        const sib = hr.nextElementSibling;
-        const id = sib && sib.dataset ? Number(sib.dataset.id) : NaN;
-        const unit = !Number.isNaN(id) && this.doc.unitById(id);
-        if (unit && unit.editable) this._activate(unit, 0);
+        const hit = this._unitElAt(hr);
+        const unit = hit && this.doc.unitById(hit.id);
+        if (unit) this._activate(unit, unit.range[1] - unit.range[0]);
       }
     }
   }
