@@ -300,7 +300,7 @@ function itemIndent(u) {
 function renderedBlock(u, doc) {
   switch (u.kind) {
     case 'heading': {
-      const e = el('h' + u.level, 'md-h' + u.level + ' md-line');
+      const e = el('h' + u.level, 'md-h' + u.level + ' md-line' + (u.text ? '' : ' md-blank'));
       e.dataset.id = u.id;
       inlineDom(parseInline(u.text), e);
       return e;

@@ -197,6 +197,24 @@ export class MarkdownEditor {
     return { unit, el: hit.el, node: pos.node, nodeOff: pos.offset };
   }
 
+  // 可操作光标：_caretUnit 之上兜底 surface 层级选区——WebKit 点击行首/行尾
+  // 边缘常给出 (surface, offset) 元素偏移而非文本节点，若无兜底，激活与
+  // 输入拦截都会跳过，字符插到无单元管辖的区域，随后的重渲染会将其清除。
+  // 折算规则：offset 0 → 首个可编辑单元行首（吸附到内容起点）；其余 → 末个可编辑单元行尾
+  _actionableCaret() {
+    const c = this._caretUnit();
+    if (c) return c;
+    const pos = this._readCaretPos();
+    if (!pos || pos.node !== this._surface) return null;
+    const units = this.doc.units.filter((u) => u.editable);
+    if (!units.length) return null;
+    const first = pos.offset === 0;
+    const u = first ? units[0] : units[units.length - 1];
+    const elu = this._findEl(u.id);
+    if (!elu) return null;
+    return { unit: u, el: elu, node: elu, nodeOff: first ? 0 : elu.childNodes.length };
+  }
+
   _pointSrcOff(node, offset) {
     if (node === this._surface) {
       return offset === 0 ? 0 : this.doc.source.length;
@@ -245,7 +263,7 @@ export class MarkdownEditor {
   }
 
   _ensureActiveCaret() {
-    const c = this._caretUnit();
+    const c = this._actionableCaret();
     if (!c) return null;
     if (c.el.classList.contains('md-active')) {
       return { unit: c.unit, srcOff: c.unit.range[0] + charOffsetIn(c.el, c.node, c.nodeOff) };
@@ -329,7 +347,7 @@ export class MarkdownEditor {
       return;
     }
     if (e.inputType !== 'insertText' || !e.data) return;
-    const c = this._caretUnit();
+    const c = this._actionableCaret();
     if (!c || c.el.classList.contains('md-active')) return;
     e.preventDefault();
     const act = this._ensureActiveCaret();
@@ -465,7 +483,7 @@ export class MarkdownEditor {
       const r = sel.getRangeAt(0);
       if (!this._surface.contains(r.startContainer)) return;
       if (!sel.isCollapsed) return;
-      const c = this._caretUnit();
+      const c = this._actionableCaret();
       if (!c || c.unit.id === this._activeId) return;
       let elOff = 0;
       if (c.el.classList.contains('md-active')) {
