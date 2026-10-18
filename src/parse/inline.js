@@ -9,14 +9,14 @@
 // 输入恒为单行内容（D34 行块模型：每行独立成块，跨行结构不走行内解析），
 // 故不处理换行（无 br/softbreak）。
 //
-// 与 CommonMark 的偏离：强调采用"同长度标记成对即生效"的简化配对（保留 `_` 词内
-// 不生效惯例、`***x***` 解析为 em>strong）；链接文本内的 `[` 不再嵌套链接。
+// 与 CommonMark 的偏离：强调仅支持 `*`（`_` 一律字面）、无序列表仅支持 `-`；
+// 强调采用"同长度标记成对即生效"的简化配对（`***x***` 解析为 em>strong）；
+// 链接文本内的 `[` 不再嵌套链接。
 
 import { ESCAPABLE } from './entities.js';
 
 const WS = new Set([' ', '\t']);
 const isWs = (c) => c === undefined || WS.has(c);
-const isAlnum = (c) => c !== undefined && /[A-Za-z0-9]/.test(c);
 
 function countRun(src, i, ch) {
   let n = 0;
@@ -24,18 +24,12 @@ function countRun(src, i, ch) {
   return n;
 }
 
-function canOpenAt(src, i, L, ch) {
-  const next = src[i + L];
-  if (isWs(next)) return false;
-  if (ch === '_' && i > 0 && isAlnum(src[i - 1])) return false; // `_` 词内不开
-  return true;
+function canOpenAt(src, i, L) {
+  return !isWs(src[i + L]);
 }
 
-function canCloseAt(src, k, L, ch) {
-  const prev = src[k - 1];
-  if (isWs(prev)) return false;
-  if (ch === '_' && isAlnum(src[k + L])) return false; // `_` 词内不闭
-  return true;
+function canCloseAt(src, k, L) {
+  return !isWs(src[k - 1]);
 }
 
 // 尝试在 i 处解析强调；成功返回 {node, next}，失败返回 null
@@ -46,13 +40,15 @@ function tryEmphasis(src, i, opts, base) {
 
   const lens = ch === '~' ? [2] : run >= 3 ? [3, 2, 1] : run === 2 ? [2, 1] : [1];
   for (const L of lens) {
-    if (!canOpenAt(src, i, L, ch)) continue;
+    if (!canOpenAt(src, i, L)) continue;
     // 从 i+L 起找最早的等长闭合
     let k = i + L;
     while (k < src.length) {
       if (src[k] === ch) {
         const run2 = countRun(src, k, ch);
-        if (run2 >= L && canCloseAt(src, k, L, ch)) {
+        // 空强调不允许（CommonMark 规则）：闭标记必须与开标记至少隔一个字符，
+        // 否则单行 "**" 会被配成空 <em></em> 而整行消失
+        if (k > i + L && run2 >= L && canCloseAt(src, k, L)) {
           const inner = parseInline(src.slice(i + L, k), opts, base + i + L);
           let node;
           if (ch === '~') node = { t: 'del', c: inner };
@@ -274,7 +270,7 @@ export function parseInline(src, opts = {}, base = 0) {
     }
 
     // 强调 / 删除线
-    if (c === '*' || c === '_' || c === '~') {
+    if (c === '*' || c === '~') {
       const r = tryEmphasis(src, i, opts, base);
       if (r) { flush(); out.push(r.node); i = r.next; continue; }
       const run = countRun(src, i, c);

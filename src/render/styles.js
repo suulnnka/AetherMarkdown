@@ -11,7 +11,7 @@
 //    硬换行（md-gap-short）--md-br-hard-gap（相邻引用行归零使竖线连续）
 //  - 列表行：符号/编号/复选框行内排在行首，正文跟随（编辑态前缀同一起点）
 //  - 引用行：渲染态竖线按层级由 background 绘制（dom.js 内联）；
-//    编辑态不画线（> 标记即层级指示，md-qmark 定位到各层级起点）
+//    引用编辑态不画竖线，前缀 > 弱化行内显示（D39 字面源码）
 //  - .md-blank：空行块保最小高度；与 .md-active 的 min-height 一致，
 //    进出编辑态高度不变
 //  - 代码块/表格：仅有的两个跨行结构；宽表格横向滚动
@@ -46,7 +46,6 @@ export const BASE_CSS = `
 .aether-host .md-checkbox { margin: 0 0.45em 0 0; accent-color: var(--md-checkbox, #0969da); pointer-events: none; }
 .aether-host .md-quote-line { color: var(--md-quote-text, #656d76); }
 .aether-host .md-quote-line + .md-quote-line { margin-top: 0; }
-.aether-host .md-qmark { position: absolute; top: 0; }
 .aether-host .md-blank { min-height: 1.2em; }
 .aether-host .md-pre, .aether-host .md-code { font-family: var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); font-size: var(--md-code-font-size, 0.9em); background: var(--md-pre-bg, #f6f8fa); border: 1px solid var(--md-border, #d0d7de); border-radius: 6px; padding: 0.75em 1em; }
 .aether-host .md-pre { position: relative; overflow-x: auto; white-space: pre; margin-top: var(--md-line-gap, 0.4em); }

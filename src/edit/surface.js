@@ -31,6 +31,8 @@ export class MarkdownEditor {
     this._events = { change: [], focus: [], blur: [], imageClick: [] };
     this._destroyed = false;
     this._composing = false;
+    this._compSettling = false; // WebKit 合成收尾期（compositionend 后一个宏任务内）
+    this._compTimer = 0;
     this._activeId = null;
     this._selRaf = 0;
 
@@ -228,7 +230,7 @@ export class MarkdownEditor {
     const isHr = elu.classList.contains('md-hr') && !elu.classList.contains('md-active');
     const nodeOff = isHr ? 0 : last ? elu.childNodes.length : 0;
     // srcOff：分隔符行显式取行尾（其渲染元素无子节点，常规映射只能得到行首）
-    const res = { unit: u, el: elu, node: elu, nodeOff };
+    const res = { unit: u, el: elu, node: elu, nodeOff, rescued: true };
     if (isHr) res.srcOff = u.range[1];
     return res;
   }
@@ -328,8 +330,36 @@ export class MarkdownEditor {
 
   // ---------- 输入 / 粘贴 / 选区删除 ----------
 
+  // WebKit 与 Chrome 的合成收尾顺序不同：Chrome 先把最终文本写进 DOM 再发
+  // compositionend；WebKit 在 compositionend 之后引擎侧还会做最后一次提交/清理。
+  // 若在 compositionend 里同步读 DOM 并重渲染（renderDoc 会 replaceChildren 整个
+  // surface），引擎仍持有的文本节点被换掉，合成文本随后被引擎回退清空，
+  // MutationObserver 再把"丢失"同步回 source——表现为输入的文字过一会消失。
+  // 因此合成结束后延迟一个宏任务，等引擎彻底收尾再统一读取 DOM 终态。
+  _deferCompositionSync() {
+    this._compSettling = true;
+    if (this._compTimer) return;
+    this._compTimer = setTimeout(() => {
+      this._compTimer = 0;
+      this._compSettling = false;
+      if (!this._destroyed && !this._composing) this._onInput();
+    }, 0);
+  }
+
+  // 用户主动操作（按键/粘贴）到来时立即结算挂起的合成同步：
+  // 此时引擎必然已收尾，先读终态再执行该操作，避免旧 source 把合成文本冲掉
+  _flushCompositionSync() {
+    if (!this._compSettling) return;
+    if (this._compTimer) {
+      clearTimeout(this._compTimer);
+      this._compTimer = 0;
+    }
+    this._compSettling = false;
+    if (!this._destroyed && !this._composing) this._onInput();
+  }
+
   _onInput() {
-    if (this._destroyed || this.readonly || this._composing) return;
+    if (this._destroyed || this.readonly || this._composing || this._compSettling) return;
     const u = this.doc.unitById(this._activeId);
     if (!u) return;
     const elu = this._findEl(u.id);
@@ -371,6 +401,7 @@ export class MarkdownEditor {
 
   _onPaste(e) {
     if (this._destroyed || this.readonly) return;
+    this._flushCompositionSync();
     e.preventDefault();
     const text = ((e.clipboardData && e.clipboardData.getData('text/plain')) || '').replace(/\r/g, '');
     if (!text) return;
@@ -435,7 +466,7 @@ export class MarkdownEditor {
 
   _bind() {
     this._handlers = [
-      [this._surface, 'keydown', (e) => handleKeydown(this, e)],
+      [this._surface, 'keydown', (e) => { this._flushCompositionSync(); handleKeydown(this, e); }],
       [this._surface, 'input', () => this._onInput()],
       [this._surface, 'beforeinput', (e) => this._onBeforeInput(e)],
       [this._surface, 'paste', (e) => this._onPaste(e)],
@@ -446,7 +477,7 @@ export class MarkdownEditor {
         const c = this._caretUnit();
         if (c && !c.el.classList.contains('md-active')) this._ensureActiveCaret();
       }],
-      [this._surface, 'compositionend', () => { this._composing = false; this._onInput(); }],
+      [this._surface, 'compositionend', () => { this._composing = false; this._deferCompositionSync(); }],
       [this._surface, 'focus', () => this._emit('focus')],
       [this._surface, 'blur', () => this._onSurfaceBlur()],
       [this._surface, 'focusout', () => this._onSurfaceBlur()],
@@ -470,6 +501,7 @@ export class MarkdownEditor {
   _unbind() {
     for (const [t, ev, fn] of this._handlers) t.removeEventListener(ev, fn);
     if (this._selRaf) clearTimeout(this._selRaf);
+    if (this._compTimer) clearTimeout(this._compTimer);
     if (this._mo) this._mo.disconnect();
   }
 
@@ -484,6 +516,7 @@ export class MarkdownEditor {
     if (this._selRaf) return;
     this._selRaf = setTimeout(() => {
       this._selRaf = 0;
+      if (this._compSettling) return; // 合成收尾期不重渲染（会读到未同步的旧 source）
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
       const r = sel.getRangeAt(0);
@@ -492,9 +525,13 @@ export class MarkdownEditor {
       const c = this._actionableCaret();
       if (!c) return;
       if (c.unit.id === this._activeId) {
-        // 光标停在 surface 层级而该行已是活动行（键盘跨过元素边界）：
-        // 拉回单元内，避免停在虚空位置（随后的输入会落到单元外被清掉）
-        if (!c.srcOff && c.el.classList.contains('md-active')) setCollapsed(c.el, c.nodeOff);
+        // 仅 surface 层级兜底光标（rescued）需要拉回单元内——停在虚空位置时
+        // 后续输入会落到单元外；真实单元内光标（_caretUnit 命中）绝不能重设，
+        // 否则行内方向键移动会被拽回（多节点行如 # 前缀标题首当其冲）。
+        // nodeOff 是元素子节点序号，需经 charOffsetIn 换算为字符偏移
+        if (c.rescued && c.el.classList.contains('md-active')) {
+          setCollapsed(c.el, charOffsetIn(c.el, c.el, c.nodeOff));
+        }
         return;
       }
       let elOff = 0;

@@ -25,7 +25,11 @@ test('标题行', () => {
 });
 
 test('分割线行', () => {
-  for (const s of ['---', '***', '___']) assert.equal(kinds(s)[0], 'hr');
+  assert.equal(kinds('---')[0], 'hr');
+  assert.equal(kinds('-  -  -')[0], 'hr');
+  // *** / ___ 不再构成分割线（仅支持 -）
+  assert.equal(kinds('***')[0], 'text');
+  assert.equal(kinds('___')[0], 'text');
   assert.equal(kinds('--')[0], 'text');
 });
 
@@ -72,9 +76,11 @@ test('围栏代码块：唯一跨行结构', () => {
   // 未闭合
   const [open] = parseLines('```\nx');
   assert.equal(open.text, 'x');
-  // 波浪线与更长闭合栏
-  const [t] = parseLines('~~~\n```\n~~~');
+  // 更长闭合栏；波浪线不再构成围栏（仅支持反引号）
+  const [t] = parseLines('````\n```\n````');
   assert.equal(t.text, '```');
+  const [tilde] = parseLines('~~~\n~~~');
+  assert.equal(tilde.kind, 'text');
 });
 
 test('每行只应用一个主语法：引用行内的 # 按字面', () => {
@@ -165,4 +171,27 @@ test('列表深层缩进：任意前导空格仍是列表项（每 2 空格一�
   const bs = parseLines(src);
   assert.ok(bs.every((u) => u.kind === 'item'));
   assert.deepEqual(bs.map((u) => u.indent), [0, 2, 4, 6]);
+});
+
+test('全分隔行不算表格：无内容行时降级为普通文字行', () => {
+  const bs = parseLines('| --- | --- |');
+  assert.equal(bs.length, 1);
+  assert.equal(bs[0].kind, 'text');
+  const mixed = parseLines('| --- | --- |\n| A | B |');
+  assert.ok(mixed.every((u) => u.kind === 'table'));
+});
+
+test('列表标记后必须真有空格（裸 - / 1. 是普通文字行）', () => {
+  assert.equal(kinds('-')[0], 'text');
+  assert.equal(kinds('--')[0], 'text');
+  assert.equal(kinds('1.')[0], 'text');
+  assert.equal(kinds('- ')[0], 'item');
+  assert.equal(kinds('1. ')[0], 'item');
+});
+
+test('无序列表仅支持 -（+ / * 打头为普通文字行）', () => {
+  assert.equal(kinds('- 甲')[0], 'item');
+  assert.equal(kinds('+ 甲')[0], 'text');
+  assert.equal(kinds('* 甲')[0], 'text');
+  assert.equal(kinds('* [x] 甲')[0], 'text');
 });

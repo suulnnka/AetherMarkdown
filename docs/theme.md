@@ -81,5 +81,5 @@ import 'aether-markdown/theme/dark.css';   // 两套都导入 → setTheme('dark
 
 - 行块：`md-line`、`md-p`、`md-blank`、`md-h1`…`md-h6`、`md-hr`、`md-item-line`、`md-task`、`md-quote-line`、`md-pre`、`md-table`
 - 行内：`md-bullet`、`md-num`、`md-checkbox`、`md-code`、`md-code-block`、`md-table-el`、`md-tr`、`md-td`、`md-link`、`md-autolink`、`md-del`、`md-strong`、`md-em`、`md-img`
-- 编辑态：`md-active`、`md-marker`、`md-prefix`、`md-qmark`、`md-link-edit`
+- 编辑态：`md-active`、`md-marker`、`md-prefix`、`md-link-edit`
 - 状态：`md-gap-short`（硬换行后的短间距行）

@@ -5,7 +5,7 @@
 //   heading `#`~`######` 行   hr     `---` 等分割线行
 //   item    `-`/`*`/`+`/`1.` 行（含任务 `- [ ]`，缩进决定层级）
 //   quote   `>` 行（`>>` 深一层）
-//   code    围栏代码块（跨行结构：``` / ~~~ 到闭合栏）
+//   code    围栏代码块（跨行结构：``` 到闭合栏；不支持 ~~~）
 //   table   简单表格（跨行结构：连续的 `| A | B |` 行，无表头区分，单元格仅行内样式）
 //
 // 每行只应用一个主语法（引用/列表行内的 `#` 等按字面处理），
@@ -13,11 +13,13 @@
 // 所有块带 range: [start, end)（不含行尾换行符）与 textStart（内容起点，
 // 前缀 [range[0], textStart) 为缩进/标记，编辑态弱化显示）。
 
-const FENCE_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
-const HR_RE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const FENCE_RE = /^ {0,3}(`{3,})(.*)$/;
+const HR_RE = /^ {0,3}(-)(?:[ \t]*\1){2,}[ \t]*$/;
 const HEADING_RE = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/;
 const QUOTE_PREFIX_RE = /^ {0,3}(>+) ?/;
-const MARKER_RE = /^ *(?:([-+*])|(\d{1,9})([.)]))(?:[ \t]+|$)/;
+// 标记后必须真有空格（$ 不算）——否则键入 "-" 的瞬间就变成带圆点的列表项，
+// 敲 "--"、"—" 时类型来回切换、间距跳动。无序仅支持 -（+ / * 不构成列表）
+const MARKER_RE = /^ *(?:(-)|(\d{1,9})([.)]))[ \t]+/;
 const TASK_RE = /^\[([ xX])][ \t]+/;
 
 export function parseLines(src) {
@@ -37,7 +39,7 @@ export function parseLines(src) {
     const end = start + line.length;
 
     const fence = FENCE_RE.exec(line);
-    if (fence && !(fence[1][0] === '`' && fence[2].includes('`'))) {
+    if (fence && !fence[2].includes('`')) {
       const lead = /^ */.exec(line)[0].length; // 开栏行前导空格数（内容行剥同等缩进）
       const closeRe = new RegExp(`^ {0,3}${fence[1][0]}{${fence[1].length},}[ \\t]*$`);
       const contentLines = [];
@@ -72,20 +74,27 @@ export function parseLines(src) {
       continue;
     }
 
-    // 表格：连续的简单表格行合并为一个跨行单元（遇非表格行结束）
+    // 表格：连续的简单表格行合并为一个跨行单元（遇非表格行结束）。
+    // 全部分隔行（无内容行）的"表格"没有任何可渲染行——会得到 0 高空表，
+    // 不可见也不可点，该行彻底无法编辑；降级为普通文字行，
+    // 补上内容行后自然重新聚合为表格（D35 修订）
     if (isTableRow(line)) {
       const rows = [];
       let j = i;
       for (; j < lines.length && isTableRow(lines[j]); j++) {
         rows.push({ start: starts[j], textStart: starts[j], text: lines[j] });
       }
-      const last = rows[rows.length - 1];
-      blocks.push({
-        kind: 'table',
-        range: [start, last.start + last.text.length],
-        textStart: start,
-        lines: rows,
-      });
+      if (rows.some((r) => !parseTableRow(r.text).sep)) {
+        const last = rows[rows.length - 1];
+        blocks.push({
+          kind: 'table',
+          range: [start, last.start + last.text.length],
+          textStart: start,
+          lines: rows,
+        });
+      } else {
+        for (const r of rows) blocks.push(parseOneLine(r.text, r.start, r.start + r.text.length));
+      }
       i = j;
       continue;
     }

@@ -120,7 +120,7 @@ Unit {
 ## 9. IME 策略
 
 - `compositionstart` → `compositionend` 期间：不重渲染、不切活动块、不动 DOM 结构（`_composing` 旗标拦截全部同步入口）；合成树交给浏览器。
-- `compositionend` 后：一次性同步源文本并走正常数据流。
+- `compositionend` 后：**延迟一个宏任务**再一次性同步源文本并走正常数据流（`_deferCompositionSync`）。Chrome 在 `compositionend` 前就写好 DOM 终态，WebKit 在事件之后引擎侧还有最后一次提交/清理——立即同步会把引擎仍引用的文本节点重渲染换掉，合成文本被引擎回退清空（Safari 表现为输入的文字过一会消失）。收尾窗口内 `input`/MutationObserver/selectionchange 一律熄火；用户按键或粘贴先 `_flushCompositionSync` 结算挂起的同步。
 - 活动块本身即源码态纯文本，合成树不会被语法结构打断。丢字/断字/合成中被重渲染为零容忍缺陷。
 
 ## 10. 粘贴与拖放

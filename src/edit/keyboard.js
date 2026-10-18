@@ -7,6 +7,17 @@
 //  - 行尾 Delete = 与下一行合并
 //  - Tab：列表行整体缩进 ±2 空格；代码块内插入两空格；其余无操作
 
+// 光标是否在单元的首/末视觉行（折行单元的中间行不触发跨界拦截；
+// 取不到光标矩形时按边界处理，保证空块也能进入）
+function onEdgeVisualLine(c, down) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return true;
+  const cr = sel.getRangeAt(0).getBoundingClientRect();
+  const er = c.el.getBoundingClientRect();
+  if (!cr.height) return true;
+  return down ? cr.bottom >= er.bottom - cr.height * 1.25 : cr.top <= er.top + cr.height * 1.25;
+}
+
 export function handleKeydown(ed, e) {
   if (ed.readonly) return;
   if (e.isComposing || e.keyCode === 229) return; // IME 合成中
@@ -31,6 +42,23 @@ export function handleKeydown(ed, e) {
     e.preventDefault();
     ed._deleteSelection();
     return;
+  }
+
+  // 跨入代码块的上下键：渲染态代码块不含围栏行（比编辑态源码少两行），
+  // 浏览器按几何落点会跳过近端围栏（下行、上行都先落代码行），空代码块
+  // 更会被整体跳过。在单元首/末视觉行处改为直接激活代码块编辑态：
+  // 下行 → 源码行首（```js 行），上行 → 源码行尾（闭栏行）
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey) {
+    const cc = ed._actionableCaret();
+    if (cc && !cc.unit.lines && onEdgeVisualLine(cc, e.key === 'ArrowDown')) {
+      const idx = ed.doc.units.indexOf(cc.unit);
+      const adj = e.key === 'ArrowDown' ? ed.doc.units[idx + 1] : ed.doc.units[idx - 1];
+      if (adj && adj.kind === 'code') {
+        e.preventDefault();
+        ed._activate(adj, e.key === 'ArrowDown' ? 0 : adj.range[1] - adj.range[0]);
+      }
+    }
+    return; // 其余上下键（含多行单元内的行间移动）交给浏览器默认
   }
 
   const c = ed._ensureActiveCaret();

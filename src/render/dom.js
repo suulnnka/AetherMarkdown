@@ -7,7 +7,7 @@
 //         代码块与表格是仅有的两个跨行结构（表格渲染 <table>，单元格仅行内样式）。
 // 编辑态：显示整行源码，标记前缀（含前导缩进空格，## / - / 1. / > 等）以 md-marker
 //         弱化并排于行首，空格按源码字面占位（pre-wrap），不做缩进加工（D39）。
-//         引用编辑态不画竖线（> 标记即层级指示），仅保留缩进。
+//         引用编辑态不画竖线，前缀 > 弱化行内显示（D39 字面源码）。
 //         DOM 纯文本与源切片逐字节一致（幂等同步前提）。
 // 文本节点携带 __src（内容坐标），是渲染态光标 → 源偏移映射的依据。
 
@@ -238,29 +238,6 @@ function applyQuoteBars(e, depth) {
   e.style.paddingLeft = depth + 'em';
 }
 
-// 编辑态引用前缀：编辑态不画竖线（> 标记即层级指示，竖线会压住行首字符），
-// 每个 > 定位到对应层级起点（i × 1em，其余字符并入前一个标记，保持字节一致）
-function quoteEditPrefix(prefix, parent) {
-  let barIndex = -1;
-  let span = null;
-  for (const ch of prefix) {
-    if (ch === '>') {
-      barIndex++;
-      span = el('span', 'md-marker md-qmark');
-      span.textContent = ch;
-      span.style.left = `${barIndex}em`;
-      parent.append(span);
-    } else if (span) {
-      span.textContent += ch;
-    } else {
-      span = el('span', 'md-marker md-qmark');
-      span.style.left = '0';
-      span.textContent = ch;
-      parent.append(span);
-    }
-  }
-}
-
 export function buildActiveElement(u, doc) {
   const { tag, cls } = activeTagCls(u);
   // 空行编辑态保留 md-blank（min-height），避免空块高度塌陷把邻行拉上来
@@ -268,15 +245,8 @@ export function buildActiveElement(u, doc) {
   e.dataset.id = u.id;
   if (u.kind === 'code') editCodeContent(u, doc, e);
   else if (u.kind === 'table') editTableContent(u, doc, e);
-  else if (u.kind === 'quote') {
-    // 编辑态不画竖线，只保留与渲染态一致的缩进（文字起点 = 层级数 × 1em）
-    e.style.paddingLeft = u.qdepth + 'em';
-    const prefix = doc.source.slice(u.range[0], u.textStart);
-    const rest = doc.source.slice(u.textStart, u.range[1]);
-    quoteEditPrefix(prefix, e);
-    appendInlineEdit(u, rest, u.textStart - u.range[0], e);
-  }
-  else editLineContent(u, doc, e);
+  else editLineContent(u, doc, e); // 引用同此：前缀 > 弱化行内显示（D39 字面源码，
+  // 不做绝对定位标记——WebKit 光标竖向导航过不去绝对定位元素，会卡死在行内）
   // 渲染态嵌套缩进由 marginLeft 表达；编辑态不做缩进加工，前导空格按源码字面显示
   return e;
 }
@@ -293,6 +263,7 @@ function renderedBlock(u, doc) {
     case 'heading': {
       const e = el('h' + u.level, 'md-h' + u.level + ' md-line' + (u.text ? '' : ' md-blank'));
       e.dataset.id = u.id;
+      if (!u.text) e.append(document.createElement('br')); // 行框 = 编辑态行高（前缀 # 的行框）
       inlineDom(parseInline(u.text), e);
       return e;
     }
@@ -327,6 +298,7 @@ function renderedBlock(u, doc) {
       const e = el('div', 'md-quote-line md-line');
       e.dataset.id = u.id;
       applyQuoteBars(e, u.qdepth);
+      if (!u.text) e.append(document.createElement('br')); // 空引用行保行框（编辑态有 > 前缀行框）
       inlineDom(parseInline(u.text), e);
       return e;
     }

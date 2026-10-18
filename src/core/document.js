@@ -86,7 +86,7 @@ export class Document {
     } else if (u.kind === 'item') {
       stripped = u.indent >= 2
         ? slice.replace(/^ {1,2}/, '')
-        : slice.replace(/^ {0,3}(?:[-+*]|\d{1,9}[.)])(?: \[[ xX]\])?[ \t]?/, '');
+        : slice.replace(/^ {0,3}(?:-|\d{1,9}[.)])(?: \[[ xX]\])?[ \t]?/, '');
     } else if (u.kind === 'quote') {
       stripped = slice.replace(/^ {0,3}> ?/, '');
     } else if (u.kind === 'hr') {

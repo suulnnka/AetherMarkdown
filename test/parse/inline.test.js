@@ -15,11 +15,12 @@ test('纯文本', () => {
 
 test('粗体/斜体/删除线', () => {
   assert.equal(one('**b**').t, 'strong');
-  assert.equal(one('__b__').t, 'strong');
   assert.equal(one('*i*').t, 'em');
-  assert.equal(one('_i_').t, 'em');
   assert.equal(one('~~d~~').t, 'del');
   assert.deepEqual(one('**b**').c, [{ t: 'text', v: 'b', s: 2, e: 3 }]);
+  // 下划线不支持强调，一律字面
+  assert.equal(one('__b__').t, 'text');
+  assert.equal(one('_i_').t, 'text');
 });
 
 test('***x*** 解析为 em > strong', () => {
@@ -34,17 +35,23 @@ test('嵌套：strong 内 em', () => {
   assert.deepEqual(tk.c.map((x) => x.t), ['text', 'em', 'text']);
 });
 
-test('星号词内可用、下划线词内不生效', () => {
+test('下划线一律字面（不支持强调）', () => {
   const tks = parseInline('a*b*c');
   assert.deepEqual(tks.map((x) => x.t), ['text', 'em', 'text']);
   const snake = parseInline('snake_case_word');
   assert.equal(plainText(snake), 'snake_case_word');
   assert.ok(!snake.some((x) => x.t === 'em'));
+  const under = parseInline('__b__ _i_');
+  assert.ok(!under.some((x) => x.t === 'strong' || x.t === 'em'));
 });
 
 test('未配对的强调按字面', () => {
   assert.equal(one('*literal').v, '*literal');
   assert.equal(one('~single~字面').t, 'text');
+  // 空强调不成立（CommonMark 规则）：** / *** 按字面显示，不产生空 <em>
+  assert.equal(one('**').v, '**');
+  assert.equal(one('***').v, '***');
+  assert.equal(one('____').v, '____');
 });
 
 test('行内代码', () => {
