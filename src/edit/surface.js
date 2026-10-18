@@ -426,6 +426,9 @@ export class MarkdownEditor {
       [this._surface, 'focus', () => this._emit('focus')],
       [this._surface, 'blur', () => this._onSurfaceBlur()],
       [this._surface, 'focusout', () => this._onSurfaceBlur()],
+      // 链接/图片上按下不落光标：否则 selectionchange 会先把行切成编辑态、
+      // DOM 被替换，随后的 click 落在新元素上，链接就打不开了
+      [this._surface, 'mousedown', (e) => this._onMouseDown(e)],
       [this._surface, 'click', (e) => this._onClick(e)],
       [this._surface, 'drop', (e) => e.preventDefault()],
       [this._surface, 'dragover', (e) => e.preventDefault()],
@@ -472,6 +475,12 @@ export class MarkdownEditor {
       }
       this._activate(c.unit, elOff);
     });
+  }
+
+  _onMouseDown(e) {
+    if (this.readonly) return; // 只读态保留原生文本选择
+    const t = e.target;
+    if (t instanceof Element && (t.closest('a') || t.closest('img.md-img'))) e.preventDefault();
   }
 
   _onClick(e) {
