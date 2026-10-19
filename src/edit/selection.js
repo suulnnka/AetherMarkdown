@@ -3,14 +3,15 @@
 // 活动单元是纯文本节点（源码态），偏移即文本偏移；
 // 渲染态单元用文本节点的 __src（内容坐标）+ 单元 lineMap（内容坐标 ↔ 源偏移）换算。
 
-// 元素内纯文本（<br> 计为换行）
+// 元素内纯文本（编辑态源码流）。
+// <br> 不计入：contenteditable 空块/行尾会由浏览器塞 placeholder <br>（Firefox
+// 尤甚），它不是源码内容；多行单元的换行以文本节点里的 \n 表达（pre-wrap）。
 export function extractText(elm) {
   let s = '';
   const rec = (n) => {
     for (const c of n.childNodes) {
       if (c.nodeType === Node.TEXT_NODE) s += c.data;
-      else if (c.tagName === 'BR') s += '\n';
-      else rec(c);
+      else if (c.tagName !== 'BR') rec(c);
     }
   };
   rec(elm);

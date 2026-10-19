@@ -384,6 +384,15 @@ export class MarkdownEditor {
       return;
     }
     if (e.inputType !== 'insertText' || !e.data) return;
+    // 跨块选区上输入：浏览器默认编辑会把行块子树整个替换成文本节点，
+    // data-id 丢失后 _onInput 同步短路、DOM 与源码分叉——必须拦下走源文本变换
+    const selRange = this._selectionSrcRange();
+    if (selRange) {
+      e.preventDefault();
+      this.doc.splice(selRange[0], selRange[1], e.data);
+      this._applyStructural(selRange[0] + e.data.length, { typing: true });
+      return;
+    }
     const c = this._actionableCaret();
     if (!c || c.el.classList.contains('md-active')) return;
     e.preventDefault();
