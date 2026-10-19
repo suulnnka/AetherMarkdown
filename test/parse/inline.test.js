@@ -27,12 +27,83 @@ test('***x*** 解析为 em > strong', () => {
   const tk = one('***x***');
   assert.equal(tk.t, 'em');
   assert.equal(tk.c[0].t, 'strong');
+  // 内层 strong 必须带 s/e，否则编辑态拼不回源码（会丢掉 *** ）
+  assert.equal(tk.c[0].s, 1);
+  assert.equal(tk.c[0].e, 6);
 });
 
 test('嵌套：strong 内 em', () => {
   const tk = one('**a *b* c**');
   assert.equal(tk.t, 'strong');
   assert.deepEqual(tk.c.map((x) => x.t), ['text', 'em', 'text']);
+});
+
+test('嵌套：em 内 strong 与共享闭合 ***', () => {
+  const em = one('*a **b** c*');
+  assert.equal(em.t, 'em');
+  assert.deepEqual(em.c.map((x) => x.t), ['text', 'strong', 'text']);
+
+  // **bold *em*** 的 *** 同时闭合 em 与 strong
+  const sh = one('**bold *em***');
+  assert.equal(sh.t, 'strong');
+  assert.deepEqual(sh.c.map((x) => x.t), ['text', 'em']);
+  assert.equal(sh.c[1].t, 'em');
+
+  // **a *b*** 同理
+  const sh2 = one('**a *b***');
+  assert.equal(sh2.t, 'strong');
+  assert.deepEqual(sh2.c.map((x) => x.t), ['text', 'em']);
+});
+
+// 编辑态幂等：token 树的 s/e 必须能按 editToken 规则拼回原文
+function editRebuild(content) {
+  let result = '';
+  const walk = (tk) => {
+    switch (tk.t) {
+      case 'text':
+      case 'code':
+      case 'image':
+      case 'autolink':
+        result += content.slice(tk.s, tk.e);
+        break;
+      default: {
+        let cur = tk.s;
+        for (const child of tk.c) {
+          if (child.s > cur) result += content.slice(cur, child.s);
+          walk(child);
+          cur = child.e;
+        }
+        if (tk.e > cur) result += content.slice(cur, tk.e);
+      }
+    }
+  };
+  let cur = 0;
+  for (const t of parseInline(content)) {
+    if (t.s > cur) result += content.slice(cur, t.s);
+    walk(t);
+    cur = t.e;
+  }
+  if (content.length > cur) result += content.slice(cur);
+  return result;
+}
+
+test('编辑态幂等：s/e 能拼回源码', () => {
+  for (const s of [
+    '***x***',
+    '**bold *em***',
+    '*a **b** c*',
+    '**a *b***',
+    '***a* b**',
+    '**a *b* c**',
+    '~~x~~',
+    '**b** `c` ~~d~~ [t](u)',
+    '![a](i.png) *x* **y**',
+    '*literal',
+    '**',
+    '***',
+  ]) {
+    assert.equal(editRebuild(s), s, `rebuild 失败：${s}`);
+  }
 });
 
 test('下划线一律字面（不支持强调）', () => {

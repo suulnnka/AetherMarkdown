@@ -1,4 +1,4 @@
-// 行内解析器：递归下降 + 简化强调配对（规范见 docs/markdown-syntax.md）
+// 行内解析器：扫描分段 + 强调定界符栈（规范见 docs/markdown-syntax.md）
 //
 // 产出 token 树，所有 token 带 s/e（在传入 src 坐标系中的源偏移，e 不含），
 // 供编辑层把渲染 DOM 的光标位置精确映射回源文本（render/dom.js + edit/selection.js）：
@@ -10,7 +10,8 @@
 // 故不处理换行（无 br/softbreak）。
 //
 // 与 CommonMark 的偏离：强调仅支持 `*`（`_` 一律字面）、无序列表仅支持 `-`；
-// 强调采用"同长度标记成对即生效"的简化配对（`***x***` 解析为 em>strong）；
+// 强调配对采用简化定界符栈（左右 flanking 仅看紧邻字符是否空白），
+// 支持一层嵌套与共享闭合（`***x***` → em>strong，`**bold *em***` → strong>em）；
 // 链接文本内的 `[` 不再嵌套链接。
 
 import { ESCAPABLE } from './entities.js';
@@ -22,50 +23,6 @@ function countRun(src, i, ch) {
   let n = 0;
   while (src[i + n] === ch) n++;
   return n;
-}
-
-function canOpenAt(src, i, L) {
-  return !isWs(src[i + L]);
-}
-
-function canCloseAt(src, k, L) {
-  return !isWs(src[k - 1]);
-}
-
-// 尝试在 i 处解析强调；成功返回 {node, next}，失败返回 null
-function tryEmphasis(src, i, opts, base) {
-  const ch = src[i];
-  const run = countRun(src, i, ch);
-  if (ch === '~' && run < 2) return null;
-
-  const lens = ch === '~' ? [2] : run >= 3 ? [3, 2, 1] : run === 2 ? [2, 1] : [1];
-  for (const L of lens) {
-    if (!canOpenAt(src, i, L)) continue;
-    // 从 i+L 起找最早的等长闭合
-    let k = i + L;
-    while (k < src.length) {
-      if (src[k] === ch) {
-        const run2 = countRun(src, k, ch);
-        // 空强调不允许（CommonMark 规则）：闭标记必须与开标记至少隔一个字符，
-        // 否则单行 "**" 会被配成空 <em></em> 而整行消失
-        if (k > i + L && run2 >= L && canCloseAt(src, k, L)) {
-          const inner = parseInline(src.slice(i + L, k), opts, base + i + L);
-          let node;
-          if (ch === '~') node = { t: 'del', c: inner };
-          else if (L === 3) node = { t: 'em', c: [{ t: 'strong', c: inner }] }; // ***x***
-          else if (L === 2) node = { t: 'strong', c: inner };
-          else node = { t: 'em', c: inner };
-          node.s = base + i;
-          node.e = base + k + L;
-          return { node, next: k + L };
-        }
-        k += run2;
-      } else {
-        k++;
-      }
-    }
-  }
-  return null;
 }
 
 // 解析 [text](dest "title") / ![alt](dest "title")
@@ -155,26 +112,100 @@ function tryBareUrl(src, i) {
   return { node: { t: 'autolink', href: u.startsWith('www.') ? 'http://' + u : u, text: u }, next: i + u.length };
 }
 
-export function parseInline(src, opts = {}, base = 0) {
-  const out = [];
-  let buf = '';
-  let bufStart = -1;
-  let bufEnd = 0; // 末字符的下一位置（源坐标；转义使文本长 ≠ 源跨度，故单独跟踪）
-  const flush = () => {
-    if (buf) {
-      out.push({ t: 'text', v: buf, s: base + bufStart, e: base + bufEnd });
-      buf = '';
-      bufStart = -1;
+// 定界符栈：把 flat 分段里的 * / ~ 定界符配成 em/strong/del
+// 配对规则（简化）：从左到右扫闭合，取最近的、能配上的同字符开标记；
+// 每次吃 min(开, 闭, 2) 个字符（2 → strong/del，1 → em）；
+// 共享闭合（`***x***` 的 *** = em 闭 + strong 闭）通过剩余计数继续配对完成。
+function resolveEmphasis(items) {
+  let list = items;
+  let i = 0;
+  while (i < list.length) {
+    const c = list[i];
+    if (c.t !== 'delim' || !c.canClose || c.count <= 0) {
+      i++;
+      continue;
     }
-  };
+    const isDel = c.ch === '~';
+    let oi = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      const d = list[j];
+      if (d.t !== 'delim' || d.ch !== c.ch || !d.canOpen || d.count <= 0) continue;
+      if (isDel && (d.count < 2 || c.count < 2)) continue;
+      // 空强调不成立（CommonMark）：开闭紧邻无内容则跳过，继续找更远的开标记
+      if (j + 1 === i) continue;
+      oi = j;
+      break;
+    }
+    if (oi === -1) {
+      i++;
+      continue;
+    }
+    const o = list[oi];
+    const use = isDel ? 2 : Math.min(o.count, c.count, 2);
+    const type = isDel ? 'del' : use === 2 ? 'strong' : 'em';
+    // 开标记吃内侧 use 个字符，闭标记吃内侧 use 个字符
+    const nodeS = o.s + o.count - use;
+    const nodeE = c.s + use;
+    const children = list.slice(oi + 1, i);
+    const node = { t: type, c: children, s: nodeS, e: nodeE };
+    const before = list.slice(0, oi);
+    const after = list.slice(i + 1);
+    o.count -= use;
+    c.count -= use;
+    c.s += use;
+    const mid = [];
+    if (o.count > 0) mid.push(o);
+    mid.push(node);
+    if (c.count > 0) mid.push(c);
+    list = before.concat(mid, after);
+    // 闭标记仍有剩余则停在它上面继续吃；否则从节点之后继续
+    i = c.count > 0 ? before.length + mid.length - 1 : before.length + mid.length;
+  }
+
+  // 剩余定界符字面化，并合并相邻文本
+  return finalizeChildren(list);
+}
+
+function finalizeChildren(children) {
+  const out = [];
+  for (const it of children) {
+    if (it.t === 'delim') {
+      pushText(out, it.ch.repeat(it.count), it.s, it.e);
+    } else if (it.c) {
+      it.c = finalizeChildren(it.c);
+      pushNode(out, it);
+    } else if (it.t === 'text') {
+      pushText(out, it.v, it.s, it.e);
+    } else {
+      pushNode(out, it);
+    }
+  }
+  return out;
+}
+
+function pushText(out, v, s, e) {
+  const last = out[out.length - 1];
+  if (last && last.t === 'text' && last.e === s) {
+    last.v += v;
+    last.e = e;
+    return;
+  }
+  out.push({ t: 'text', v, s, e });
+}
+
+function pushNode(out, n) {
+  out.push(n);
+}
+
+export function parseInline(src, opts = {}, base = 0) {
+  const items = [];
+  const n = src.length;
+
   const put = (ch, pos, end = pos + 1) => {
-    if (!buf) bufStart = pos;
-    buf += ch;
-    bufEnd = end;
+    pushText(items, ch, base + pos, base + end);
   };
 
   let i = 0;
-  const n = src.length;
   while (i < n) {
     const c = src[i];
 
@@ -207,8 +238,7 @@ export function parseInline(src, opts = {}, base = 0) {
         ) {
           content = content.slice(1, -1);
         }
-        flush();
-        out.push({ t: 'code', v: content, s: base + i, e: base + close + run });
+        items.push({ t: 'code', v: content, s: base + i, e: base + close + run });
         i = close + run;
         continue;
       }
@@ -223,15 +253,13 @@ export function parseInline(src, opts = {}, base = 0) {
       let m = /^<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\n\t ]*>/.exec(rest);
       if (m) {
         const href = m[0].slice(1, -1);
-        flush();
-        out.push({ t: 'autolink', href, text: href, s: base + i, e: base + i + m[0].length });
+        items.push({ t: 'autolink', href, text: href, s: base + i, e: base + i + m[0].length });
         i += m[0].length;
         continue;
       }
       m = /^<([^<>\n\t ]+@[^<>\n\t ]+)>/.exec(rest);
       if (m) {
-        flush();
-        out.push({ t: 'autolink', href: 'mailto:' + m[1], text: m[1], s: base + i, e: base + i + m[0].length });
+        items.push({ t: 'autolink', href: 'mailto:' + m[1], text: m[1], s: base + i, e: base + i + m[0].length });
         i += m[0].length;
         continue;
       }
@@ -244,10 +272,9 @@ export function parseInline(src, opts = {}, base = 0) {
     if (c === 'h' || c === 'w' || c === 'H' || c === 'W') {
       const r = tryBareUrl(src, i);
       if (r) {
-        flush();
         r.node.s = base + i;
         r.node.e = base + r.next;
-        out.push(r.node);
+        items.push(r.node);
         i = r.next;
         continue;
       }
@@ -256,25 +283,36 @@ export function parseInline(src, opts = {}, base = 0) {
     // 图片 / 链接
     if (c === '!' && src[i + 1] === '[') {
       const r = parseLink(src, i, opts, base);
-      if (r) { flush(); out.push(r.node); i = r.next; continue; }
+      if (r) { items.push(r.node); i = r.next; continue; }
       put('!', i);
       i++;
       continue;
     }
     if (c === '[') {
       const r = parseLink(src, i, opts, base);
-      if (r) { flush(); out.push(r.node); i = r.next; continue; }
+      if (r) { items.push(r.node); i = r.next; continue; }
       put('[', i);
       i++;
       continue;
     }
 
-    // 强调 / 删除线
+    // 强调 / 删除线定界符
     if (c === '*' || c === '~') {
-      const r = tryEmphasis(src, i, opts, base);
-      if (r) { flush(); out.push(r.node); i = r.next; continue; }
       const run = countRun(src, i, c);
-      for (let q = 0; q < run; q++) put(c, i + q);
+      if (c === '~' && run < 2) {
+        put('~', i, i + run);
+        i += run;
+        continue;
+      }
+      items.push({
+        t: 'delim',
+        ch: c,
+        count: run,
+        s: base + i,
+        e: base + i + run,
+        canOpen: !isWs(src[i + run]),
+        canClose: !isWs(src[i - 1]),
+      });
       i += run;
       continue;
     }
@@ -282,8 +320,7 @@ export function parseInline(src, opts = {}, base = 0) {
     put(c, i);
     i++;
   }
-  flush();
-  return out;
+  return resolveEmphasis(items);
 }
 
 // token 树 → 纯文本（用于图片 alt 等）

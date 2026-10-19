@@ -35,6 +35,7 @@ export class MarkdownEditor {
     this._compTimer = 0;
     this._activeId = null;
     this._selRaf = 0;
+    this._hadFocus = false;
 
     // 编辑面直接挂在宿主元素下（light DOM）：Shadow DOM 内的 Selection/键盘
     // 事件在 WebKit 等引擎不可靠；样式隔离由 .aether-host 强作用域实现
@@ -478,7 +479,10 @@ export class MarkdownEditor {
         if (c && !c.el.classList.contains('md-active')) this._ensureActiveCaret();
       }],
       [this._surface, 'compositionend', () => { this._composing = false; this._deferCompositionSync(); }],
-      [this._surface, 'focus', () => this._emit('focus')],
+      [this._surface, 'focus', () => {
+        this._hadFocus = true;
+        this._emit('focus');
+      }],
       [this._surface, 'blur', () => this._onSurfaceBlur()],
       [this._surface, 'focusout', () => this._onSurfaceBlur()],
       // 链接/图片上按下不落光标：否则 selectionchange 会先把行切成编辑态、
@@ -505,7 +509,10 @@ export class MarkdownEditor {
     if (this._mo) this._mo.disconnect();
   }
 
+  // blur 与 focusout 在失焦时都会触发；_hadFocus 保证 blur 事件只发一次
   _onSurfaceBlur() {
+    if (!this._hadFocus) return;
+    this._hadFocus = false;
     this._activeId = null;
     this._renderAll();
     this._emit('blur');

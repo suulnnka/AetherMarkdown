@@ -10,9 +10,15 @@ import { parseLines } from '../parse/lines.js';
 
 let UID = 1;
 
+// CRLF / 单 \r 一律归一化为 \n：行块解析按 \n 切行，载入 Windows 文档时
+// 行尾 \r 会让 ---、表格、标题等全部失配（粘贴路径已剥 \r，这里补齐另一入口）
+export function normalizeNewlines(source) {
+  return String(source).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
 export class Document {
   constructor(source) {
-    this.source = source;
+    this.source = normalizeNewlines(source);
     this.units = [];
     this.rebuild();
   }
@@ -99,8 +105,10 @@ export class Document {
   }
 
   // 与上一行合并：删除行边界（并清上一行行尾硬换行空格）。
-  // 上一行是分隔符时不合并——退格删其末尾一个标记字符（--- → --，即成普通行）
+  // 上一行是分隔符时不合并——退格删其末尾一个标记字符（--- → --，即成普通行）。
+  // 任一侧是跨行结构（code/table）时不合并——拼接会拆坏围栏 / 表格行。
   joinPrev(u) {
+    if (u.kind === 'code' || u.kind === 'table') return null;
     const idx = this.units.indexOf(u);
     const prev = idx > 0 ? this.units[idx - 1] : null;
     if (!prev) return null;
@@ -109,6 +117,7 @@ export class Document {
       this.splice(s, prev.range[1], '');
       return s;
     }
+    if (prev.kind === 'code' || prev.kind === 'table') return null;
     let s = prev.range[1];
     while (s > prev.range[0] && this.source[s - 1] === ' ') s--;
     this.splice(s, u.range[0], '');
@@ -116,13 +125,15 @@ export class Document {
   }
 
   // 与下一行合并（行尾 Delete）：行直接拼接，无分隔符。
-  // 自己是分隔符时删自身末尾一个标记字符；下一行是分隔符时删其行首一个字符
+  // 自己是分隔符时删自身末尾一个标记字符；下一行是分隔符时删其行首一个字符。
+  // 任一侧是跨行结构（code/table）时不合并——拼接会拆坏围栏 / 表格行。
   joinNext(u) {
     if (u.kind === 'hr') {
       const e = u.range[1] - 1;
       this.splice(e, u.range[1], '');
       return e;
     }
+    if (u.kind === 'code' || u.kind === 'table') return null;
     const idx = this.units.indexOf(u);
     const next = idx >= 0 && idx + 1 < this.units.length ? this.units[idx + 1] : null;
     if (!next) return null;
@@ -130,6 +141,7 @@ export class Document {
       this.splice(next.range[0], next.range[0] + 1, '');
       return u.range[1];
     }
+    if (next.kind === 'code' || next.kind === 'table') return null;
     let e = u.range[1];
     while (e > u.range[0] && this.source[e - 1] === ' ') e--;
     this.splice(e, next.range[0], '');

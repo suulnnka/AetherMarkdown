@@ -149,6 +149,13 @@ test('表格行解析：单元格偏移 / 分隔行 / 边界形态', () => {
   const esc = parseTableRow('| a\\|b | c |');
   assert.deepEqual(esc.cells.map((c) => c.text), ['a\\|b', 'c']);
 
+  // 纯空白 / 空单元格：s<=e，否则编辑态拼接会倒退、重复吐 pipe
+  for (const line of ['|  |  |', '| | x |', '|   |   |']) {
+    const r = parseTableRow(line);
+    assert.ok(r, line);
+    assert.ok(r.cells.every((c) => c.s <= c.e), `s>e：${line}`);
+  }
+
   // 空/纯空白行不是表格行；单个 | 不是表格行
   assert.equal(parseTableRow(''), null);
   assert.equal(parseTableRow('|'), null);

@@ -128,7 +128,11 @@ export function parseTableRow(line) {
     const raw = line.slice(s, e);
     const lead = /^[\t ]*/.exec(raw)[0].length;
     const tail = /[\t ]*$/.exec(raw)[0].length;
-    cells.push({ s: s + lead, e: e - tail, text: raw.slice(lead, raw.length - tail) });
+    // 纯空白单元格 lead+tail 会吃满 raw，e-tail < s+lead——夹紧为零宽区间，
+    // 否则 s>e 会让编辑态按 cur=c.e 倒退拼接、重复吐出 pipe
+    const ts = s + lead;
+    const te = Math.max(ts, e - tail);
+    cells.push({ s: ts, e: te, text: line.slice(ts, te) });
   }
   const sep = cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c.text));
   return { cells, sep };
