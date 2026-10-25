@@ -102,6 +102,15 @@ export class MarkdownEditor {
     this._surface.blur();
   }
 
+  /** 聚焦并进入末尾空行:传 clientY 时按点击位置进入下方第 N 行空位
+   *  (不足则补足),否则进入(必要时新建)紧邻末条的空行 */
+  focusEndBlank(clientY) {
+    this._checkAlive();
+    this._surface.focus();
+    if (typeof clientY === 'number') this._enterEndBlankAt(clientY);
+    else this._enterEndBlank();
+  }
+
   setReadonly(v) {
     this._checkAlive();
     this.readonly = !!v;
@@ -166,6 +175,9 @@ export class MarkdownEditor {
     const old = this._findEl(u.id);
     if (!old) return;
     const neu = buildActiveElement(u, this.doc);
+    // renderDoc 赋予的排版类要带过来:局部重建不经过 renderDoc,丢了
+    // md-gap-short 会让硬换行续行的间距在编辑态/渲染态之间来回跳(6px)
+    if (old.classList.contains('md-gap-short')) neu.classList.add('md-gap-short');
     old.replaceWith(neu);
     setCollapsed(neu, Math.max(0, caretOff - u.range[0]));
   }
@@ -199,6 +211,121 @@ export class MarkdownEditor {
     const unit = this.doc.unitById(hit.id);
     if (!unit) return null;
     return { unit, el: hit.el, node: pos.node, nodeOff: pos.offset };
+  }
+
+  // ---------- 空白区点击(几何接管)----------
+  // 点击落在行块之间的间隙、各行文本右侧/下方等空白处时,浏览器只能给出
+  // surface 层级的元素选区(子元素序号),与点击位置常对不上 —— 后续按序号
+  // 救援会把光标/滚动拽到别的行。这里在 pointerdown 阶段先做命中测试:
+  // 命中测试给出具体文本位(非 surface 容器)→ 交原生(精确列位/拖选/双击
+  // 选词都依赖原生);否则自接管,按几何落点就最近行,末行之下 = Notion 式
+  // 进入(必要时新建)末尾空行。
+  _probeCaretRange(x, y) {
+    if (typeof document.caretRangeFromPoint !== 'function') return null;
+    try { return document.caretRangeFromPoint(x, y); } catch { return null; }
+  }
+
+  _enterEndBlank() {
+    const units = this.doc.units;
+    const last = units[units.length - 1];
+    if (last && last.kind === 'blank') { this._activate(last, 0); return; }
+    const end = this.doc.source.length;
+    this.doc.splice(end, end, '\n');
+    this._applyStructural(end + 1, { typing: false });
+  }
+
+  /** 键盘 ↓ 在文末:向下再进入一行空行(已有尾空行也再补一条,连续 ↓ 连续下行) */
+  _stepEndBlank() {
+    const end = this.doc.source.length;
+    this.doc.splice(end, end, '\n');
+    this._applyStructural(end + 1, { typing: false });
+  }
+
+  /** 点击正文下方第 N 行空位:按几何行距算出 N,补足空行并把光标放进第 N 行
+   *  (Notion 式:点哪儿光标就在哪一行,而不是全挤到末尾一条空行里) */
+  _enterEndBlankAt(clientY) {
+    const kids = [...this._surface.children];
+    if (!kids.length) { this._enterEndBlank(); return; }
+    const lastR = kids[kids.length - 1].getBoundingClientRect();
+    /* 空行行距 = min-height(1.2em)+ 行间距(0.4em)≈ 1.6em,按字号估;
+     * 用文本行实测会偏小(硬换行紧贴行/字高不同),累计到第几行就偏了 */
+    const fs = parseFloat(getComputedStyle(this._surface).fontSize) || 15;
+    const pitch = Math.max(12, Math.round(fs * 1.6));
+    const n = Math.min(60, Math.max(1, Math.round((clientY - lastR.bottom) / pitch + 0.5)));
+    let have = 0;   // 现有尾随空行数(计入 N,不足才补)
+    for (let i = this.doc.units.length - 1; i >= 0; i--) {
+      if (this.doc.units[i].kind === 'blank') have++; else break;
+    }
+    if (n <= have) {
+      this._activate(this.doc.units[this.doc.units.length - have + (n - 1)], 0);
+      return;
+    }
+    const end = this.doc.source.length;
+    this.doc.splice(end, end, '\n'.repeat(n - have));
+    this._applyStructural(end + (n - have), { typing: false });   // 光标到末尾 = 第 N 行
+  }
+
+  _onSurfacePointerDown(e) {
+    if (this.readonly || this._destroyed || e.button !== 0 || e.shiftKey) return;
+    if (!(e.target instanceof Element)) return;
+    if (e.target.closest('a, img, hr.md-hr')) return;   // 链接/图片/分隔符:走 _onMouseDown/_onClick
+    /* 几何优先判定:末行之下 = 进入(必要时新建)末尾空行;首行之上 = 首行行首。
+     * 不能先做命中测试 —— caretRangeFromPoint 会把正文下方的落点就近映射进
+     * 末行文本,Notion 分支就永远走不到了。 */
+    const kids = [...this._surface.children];
+    if (!kids.length) { e.preventDefault(); this._surface.focus(); this._enterEndBlank(); return; }
+    const rects = kids.map((k) => k.getBoundingClientRect());
+    if (e.clientY > rects[rects.length - 1].bottom + 2) {
+      e.preventDefault();
+      this._surface.focus();
+      this._enterEndBlankAt(e.clientY);   // 按点击位置进入下方第 N 行空位
+      return;
+    }
+    if (e.clientY < rects[0].top - 2) {
+      e.preventDefault();
+      this._surface.focus();
+      const first = this.doc.units[0];
+      this._activate(first, (first.textStart ?? first.range[0]) - first.range[0]);
+      return;
+    }
+    /* 行块之间/文本右侧等空白:命中测试能给出具体文本位(非 surface 容器)
+     * → 交原生(精确列位/拖选/双击选词都依赖原生);退化才自接管按几何就近 */
+    const probe = this._probeCaretRange(e.clientX, e.clientY);
+    if (probe && probe.startContainer !== this._surface) return;
+    e.preventDefault();
+    this._surface.focus();
+    this._placeGeom(e.clientX, e.clientY, probe, kids, rects);
+  }
+
+  _placeGeom(x, y, probe, kids, rects) {
+    // 命中测试给出的具体文本位(可能是间隙点击映射到的邻行文本)直接采用
+    if (probe && probe.startContainer !== this._surface) {
+      const sel = window.getSelection();
+      if (sel) {
+        const r = probe.cloneRange();
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+    let idx = rects.findIndex((r) => y >= r.top && y <= r.bottom);
+    if (idx < 0) {   // 行间隙:取中线判定归属
+      for (let i = 0; i < rects.length - 1; i++) {
+        if (y > rects[i].bottom && y < rects[i + 1].top) {
+          idx = y < (rects[i].bottom + rects[i + 1].top) / 2 ? i : i + 1;
+          break;
+        }
+      }
+      if (idx < 0) { this._enterEndBlank(); return; }
+    }
+    // 行内落位拿不到列位:按文本中点分行首/行尾
+    const u = this.doc.units[idx];
+    const tr = document.createRange();
+    tr.selectNodeContents(kids[idx]);
+    const trect = tr.getBoundingClientRect();
+    const srcOff = x < (trect.left + trect.right) / 2 ? (u.textStart ?? u.range[0]) : u.range[1];
+    this._activate(u, srcOff - u.range[0]);
   }
 
   // 可操作光标：_caretUnit 之上兜底 surface 层级选区——WebKit 点击行首/行尾
@@ -384,7 +511,7 @@ export class MarkdownEditor {
       return;
     }
     if (e.inputType !== 'insertText' || !e.data) return;
-    // 跨块选区上输入：浏览器默认编辑会把行块子树整个替换成文本节点，
+    // 跨块选区上输入:浏览器默认编辑会把行块子树整个替换成文本节点,
     // data-id 丢失后 _onInput 同步短路、DOM 与源码分叉——必须拦下走源文本变换
     const selRange = this._selectionSrcRange();
     if (selRange) {
@@ -395,11 +522,11 @@ export class MarkdownEditor {
     }
     const c = this._actionableCaret();
     if (!c || c.el.classList.contains('md-active')) return;
-    e.preventDefault();
+    // 光标在渲染态行上:先激活该行、落好光标,再放行默认插入 —— 不
+    // preventDefault,让字符走原生管线插入到刚激活元素的光标处。
+    // 拦截+手动插入会把长按连发/输入法等系统输入特性挡在门外。
     const act = this._ensureActiveCaret();
-    if (!act) return;
-    this.doc.splice(act.srcOff, act.srcOff, e.data);
-    this._applyStructural(act.srcOff + e.data.length, { typing: true });
+    if (!act) e.preventDefault();
   }
 
   _insertPlainText(text) {
@@ -494,8 +621,10 @@ export class MarkdownEditor {
       }],
       [this._surface, 'blur', () => this._onSurfaceBlur()],
       [this._surface, 'focusout', () => this._onSurfaceBlur()],
+      // 空白区点击几何接管(须先于 mousedown:preventDefault 才能拦下原生落光标)
+      [this._surface, 'pointerdown', (e) => this._onSurfacePointerDown(e)],
       // 链接/图片上按下不落光标：否则 selectionchange 会先把行切成编辑态、
-      // DOM 被替换，随后的 click 落在新元素上，链接就打不开了
+      // DOM 被替换，随后的 click 落点失效（链接就打不开了）
       [this._surface, 'mousedown', (e) => this._onMouseDown(e)],
       [this._surface, 'click', (e) => this._onClick(e)],
       [this._surface, 'drop', (e) => e.preventDefault()],

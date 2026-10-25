@@ -248,6 +248,10 @@ export function buildActiveElement(u, doc) {
   else editLineContent(u, doc, e); // 引用同此：前缀 > 弱化行内显示（D39 字面源码，
   // 不做绝对定位标记——WebKit 光标竖向导航过不去绝对定位元素，会卡死在行内）
   // 渲染态嵌套缩进由 marginLeft 表达；编辑态不做缩进加工，前导空格按源码字面显示
+  // 空内容的激活行补占位 <br>:无子节点的空块里折叠选区矩形退化(y=0),
+  // 光标会画到上一个有效文本位置(上一行行尾);<br> 给光标一个真实行框。
+  // extractText/charOffsetIn 都不计 <br>,源码同步不受影响。
+  if (!e.childNodes.length) e.append(document.createElement('br'));
   return e;
 }
 
@@ -276,6 +280,9 @@ function renderedBlock(u, doc) {
     case 'blank': {
       const e = el('p', 'md-p md-blank md-line');
       e.dataset.id = u.id;
+      // 占位 <br>:无子节点的空块,原生上下键/点击移入时浏览器给不出
+      // 行内选区(光标会被甩到 surface 外层容器);<br> 提供真实落位目标
+      e.append(document.createElement('br'));
       return e;
     }
     case 'item': {

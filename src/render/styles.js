@@ -12,7 +12,10 @@
 //  - 列表行：符号/编号/复选框行内排在行首，正文跟随（编辑态前缀同一起点）
 //  - 引用行：渲染态竖线按层级由 background 绘制（dom.js 内联）；
 //    引用编辑态不画竖线，前缀 > 弱化行内显示（D39 字面源码）
-//  - .md-blank：空行块保最小高度；与 .md-active 的 min-height 一致，
+//  - .md-blank：空行块保最小高度(空块行框由占位 <br> 保证,.md-active 不再
+//    设 min-height —— 平台字体行高低于 1.2em 时它会把激活行撑高,编辑态
+//    与渲染态高度不一致,点击行时内容随之下移)
+
 //    进出编辑态高度不变
 //  - 代码块/表格：仅有的两个跨行结构；宽表格横向滚动
 //  - 编辑态：整行源码显示，标记前缀（## / - / 1. / > 等）行内排在行首，
@@ -54,7 +57,7 @@ export const BASE_CSS = `
 .aether-host .md-table { margin-top: var(--md-line-gap, 0.4em); overflow-x: auto; }
 .aether-host .md-table-el { border-collapse: collapse; width: 100%; }
 .aether-host .md-td { border: 1px solid var(--md-border, #d0d7de); padding: 0.3em 0.65em; vertical-align: top; }
-.aether-host .md-active { position: relative; white-space: pre-wrap; min-height: 1.2em; }
+.aether-host .md-active { position: relative; white-space: pre-wrap; }
 .aether-host .md-marker { color: var(--md-marker, #6e7781); }
 .aether-host .md-pre.md-active[data-lang]::before { display: none; }
 .aether-host .md-link { color: var(--md-link, #0969da); text-decoration: none; cursor: pointer; }

@@ -18,13 +18,14 @@ export function extractText(elm) {
   return s;
 }
 
-// (node, offset) 在容器内的字符偏移（与 extractText 同一坐标）。
+// (node, offset) 在容器内的字符偏移（与 extractText 同一坐标,<br> 同样不计入:
+// 它是占位/浏览器塞入的行框,不是源码内容）。
 // node 可能位于任意深度的子树（如标记 span 内的文本节点），需下钻匹配。
 export function charOffsetIn(elm, node, offset) {
   let s = 0;
   let found = false;
   const len = (n) =>
-    n.nodeType === Node.TEXT_NODE ? n.data.length : n.tagName === 'BR' ? 1 : extractText(n).length;
+    n.nodeType === Node.TEXT_NODE ? n.data.length : n.tagName === 'BR' ? 0 : extractText(n).length;
   const rec = (n) => {
     if (found) return;
     if (n === node) {

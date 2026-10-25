@@ -44,6 +44,11 @@ export function handleKeydown(ed, e) {
     return;
   }
 
+  // 只有结构键需要可编辑光标(换行/缩进/删行);文本键(字母/符号等)一律
+  // 不碰:keydown 阶段的激活重渲染插在按键与默认插入之间,会干扰系统的
+  // 长按连发/重音弹窗等输入特性 —— 文本插入交给 beforeinput/原生管线
+  if (e.key !== 'Enter' && e.key !== 'Tab' && e.key !== 'Backspace' && e.key !== 'Delete') return;
+
   // 跨入代码块的上下键：渲染态代码块不含围栏行（比编辑态源码少两行），
   // 浏览器按几何落点会跳过近端围栏（下行、上行都先落代码行），空代码块
   // 更会被整体跳过。在单元首/末视觉行处改为直接激活代码块编辑态：
@@ -56,6 +61,15 @@ export function handleKeydown(ed, e) {
       if (adj && adj.kind === 'code') {
         e.preventDefault();
         ed._activate(adj, e.key === 'ArrowDown' ? 0 : adj.range[1] - adj.range[0]);
+      } else if (adj && adj.kind === 'blank') {
+        // 相邻是空行:直接激活落位(空块没有列位可保留;浏览器原生移入
+        // 空块的行为不可靠,光标可能被甩到 surface 外层容器)
+        e.preventDefault();
+        ed._activate(adj, 0);
+      } else if (e.key === 'ArrowDown' && !adj) {
+        // 末行向下:再进入一行新空行(连续 ↓ 连续下行,文末以下是可编辑区)
+        e.preventDefault();
+        ed._stepEndBlank();
       }
     }
     return; // 其余上下键（含多行单元内的行间移动）交给浏览器默认
