@@ -245,19 +245,31 @@ export class MarkdownEditor {
    *  (Notion 式:点哪儿光标就在哪一行,而不是全挤到末尾一条空行里) */
   _enterEndBlankAt(clientY) {
     const kids = [...this._surface.children];
+    const units = this.doc.units;
     if (!kids.length) { this._enterEndBlank(); return; }
-    const lastR = kids[kids.length - 1].getBoundingClientRect();
-    /* 空行行距 = min-height(1.2em)+ 行间距(0.4em)≈ 1.6em,按字号估;
-     * 用文本行实测会偏小(硬换行紧贴行/字高不同),累计到第几行就偏了 */
-    const fs = parseFloat(getComputedStyle(this._surface).fontSize) || 15;
-    const pitch = Math.max(12, Math.round(fs * 1.6));
-    const n = Math.min(60, Math.max(1, Math.round((clientY - lastR.bottom) / pitch + 0.5)));
-    let have = 0;   // 现有尾随空行数(计入 N,不足才补)
-    for (let i = this.doc.units.length - 1; i >= 0; i--) {
-      if (this.doc.units[i].kind === 'blank') have++; else break;
+    /* N 必须从「最后一条内容行」数起(跳过尾随空行):锚到最后元素时,
+     * 已有尾空行会把 N 压小,后续点击全部偏移、光标总跳回紧贴内容的第一
+     * 条空行;已有尾空行按 N 复用,不足才补 */
+    let have = 0;
+    let li = kids.length - 1;
+    while (li >= 0 && units[li] && units[li].kind === 'blank') { li--; have++; }
+    const anchorEl = li >= 0 ? kids[li] : kids[0];
+    const anchorBottom = anchorEl.getBoundingClientRect().bottom;
+    /* 行距:有尾空行就实测(高度+margin,空行之间均匀);没有则按
+     * line-height(≈1.4em)+ 行间距(0.4em)≈ 1.8em 估 */
+    let pitch;
+    if (have > 0) {
+      const lastB = kids[kids.length - 1];
+      const cs = getComputedStyle(lastB);
+      pitch = Math.round(lastB.getBoundingClientRect().height + (parseFloat(cs.marginTop) || 0));
+    } else {
+      const fs = parseFloat(getComputedStyle(this._surface).fontSize) || 15;
+      pitch = Math.max(12, Math.round(fs * 1.8));
     }
+    if (!pitch || pitch < 8) pitch = 24;
+    const n = Math.min(60, Math.max(1, Math.round((clientY - anchorBottom) / pitch + 0.5)));
     if (n <= have) {
-      this._activate(this.doc.units[this.doc.units.length - have + (n - 1)], 0);
+      this._activate(units[units.length - have + (n - 1)], 0);
       return;
     }
     const end = this.doc.source.length;
